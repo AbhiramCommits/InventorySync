@@ -2,6 +2,7 @@ using InventorySync.Core.Dtos;
 using InventorySync.Core.Entities;
 using InventorySync.Core.Exceptions;
 using InventorySync.Core.Interfaces;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace InventorySync.Infrastructure.Services;
@@ -85,14 +86,17 @@ public class InventoryService : IInventoryService
 
         if (!string.IsNullOrEmpty(request.RowVersion))
         {
+            byte[] requested;
             try
             {
-                item.RowVersion = Convert.FromBase64String(request.RowVersion);
+                requested = Convert.FromBase64String(request.RowVersion);
             }
             catch (FormatException)
             {
                 throw new ConflictException("The supplied RowVersion is not valid Base64.");
             }
+
+            _repository.SetOriginalRowVersion(item, requested);
         }
 
         item.Name = request.Name;

@@ -1,4 +1,5 @@
 using InventorySync.Infrastructure.Data;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace InventorySync.Tests.TestHelpers;

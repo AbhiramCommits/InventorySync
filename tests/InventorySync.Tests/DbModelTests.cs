@@ -1,6 +1,9 @@
 using InventorySync.Core.Entities;
 using InventorySync.Tests.TestHelpers;
+
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace InventorySync.Tests;
 
@@ -84,5 +87,36 @@ public class DbModelTests
         var property = entity.FindProperty(nameof(InventoryItem.RowVersion))!;
 
         Assert.True(property.IsConcurrencyToken);
+    }
+
+    [Fact]
+    public void ReportingIndexes_AreConfiguredWithFiltersAndIncludes()
+    {
+        using var db = InMemoryDb.Create();
+        var model = db.GetService<IDesignTimeModel>().Model;
+
+        var lowStock = model.FindEntityType(typeof(InventoryItem))!
+            .GetIndexes().Single(i => i.GetDatabaseName() == "IX_InventoryItems_LowStock");
+        Assert.Equal("QuantityOnHand < 25", lowStock.GetFilter());
+
+        var valuation = model.FindEntityType(typeof(InventoryItem))!
+            .GetIndexes().Single(i => i.GetDatabaseName() == "IX_InventoryItems_Whse_Valuation");
+        Assert.Contains(nameof(InventoryItem.QuantityOnHand), valuation.GetIncludeProperties()!);
+        Assert.Contains(nameof(InventoryItem.UnitCost), valuation.GetIncludeProperties()!);
+
+        var openPo = model.FindEntityType(typeof(PurchaseOrder))!
+            .GetIndexes().Single(i => i.GetDatabaseName() == "IX_PurchaseOrders_OpenByStatus");
+        Assert.Equal("Status IN (1, 2)", openPo.GetFilter());
+
+        var openLines = model.FindEntityType(typeof(PurchaseOrderLine))!
+            .GetIndexes().Single(i => i.GetDatabaseName() == "IX_PurchaseOrderLines_Sku_Open");
+        Assert.Null(openLines.GetFilter());
+        Assert.Contains(nameof(PurchaseOrderLine.QuantityOrdered), openLines.GetIncludeProperties()!);
+        Assert.Contains(nameof(PurchaseOrderLine.QuantityReceived), openLines.GetIncludeProperties()!);
+
+        var auditAction = model.FindEntityType(typeof(SyncAuditEntry))!
+            .GetIndexes().Single(i => i.GetDatabaseName() == "IX_SyncAuditEntries_Action_TimestampUtc");
+        Assert.Null(auditAction.GetFilter());
+        Assert.Contains(nameof(SyncAuditEntry.SyncRunId), auditAction.GetIncludeProperties()!);
     }
 }

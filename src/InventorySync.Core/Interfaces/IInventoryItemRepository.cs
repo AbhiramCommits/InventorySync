@@ -19,6 +19,8 @@ public interface IInventoryItemRepository
 
     void Update(InventoryItem item);
 
+    void SetOriginalRowVersion(InventoryItem item, byte[] rowVersion);
+
     void Delete(InventoryItem item);
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);

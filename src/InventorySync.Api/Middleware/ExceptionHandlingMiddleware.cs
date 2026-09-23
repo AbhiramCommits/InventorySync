@@ -1,4 +1,5 @@
 using InventorySync.Core.Exceptions;
+
 using Microsoft.AspNetCore.Mvc;
 
 namespace InventorySync.Api.Middleware;
@@ -40,7 +41,8 @@ public class ExceptionHandlingMiddleware
 
             context.Response.StatusCode = statusCode;
             context.Response.ContentType = "application/problem+json";
-            await context.Response.WriteAsJsonAsync(problem, context.RequestAborted);
+            var json = System.Text.Json.JsonSerializer.Serialize(problem);
+            await context.Response.WriteAsync(json, context.RequestAborted);
         }
     }
 }

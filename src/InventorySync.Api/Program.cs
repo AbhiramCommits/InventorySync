@@ -1,6 +1,8 @@
 using System.Text.Json;
+
 using FluentValidation;
 using FluentValidation.AspNetCore;
+
 using InventorySync.Api.Data;
 using InventorySync.Api.Health;
 using InventorySync.Api.Middleware;
@@ -10,11 +12,13 @@ using InventorySync.Infrastructure.Data;
 using InventorySync.Infrastructure.Erp;
 using InventorySync.Infrastructure.Repositories;
 using InventorySync.Infrastructure.Services;
+
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
+
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);

@@ -1,4 +1,5 @@
 using FluentValidation;
+
 using InventorySync.Core.Dtos;
 
 namespace InventorySync.Api.Validation;

@@ -1,4 +1,5 @@
 using System.Globalization;
+
 using InventorySync.Core.Dtos.Erp;
 using InventorySync.Core.Entities;
 using InventorySync.Core.Enums;
@@ -168,7 +169,7 @@ public static class ErpRecordMapper
             return null;
         }
 
-        if (int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result))
+        if (int.TryParse(trimmed, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var result))
         {
             return result;
         }
@@ -185,7 +186,7 @@ public static class ErpRecordMapper
             return 0;
         }
 
-        if (int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result))
+        if (int.TryParse(trimmed, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var result))
         {
             return result;
         }
@@ -203,7 +204,7 @@ public static class ErpRecordMapper
             return null;
         }
 
-        if (decimal.TryParse(trimmed, NumberStyles.Number, CultureInfo.InvariantCulture, out var result))
+        if (decimal.TryParse(trimmed, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var result))
         {
             return result;
         }

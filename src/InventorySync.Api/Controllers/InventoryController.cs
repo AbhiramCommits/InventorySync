@@ -1,5 +1,6 @@
 using InventorySync.Core.Dtos;
 using InventorySync.Core.Interfaces;
+
 using Microsoft.AspNetCore.Mvc;
 
 namespace InventorySync.Api.Controllers;

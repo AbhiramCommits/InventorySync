@@ -1,4 +1,5 @@
 using InventorySync.Core.Entities;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -27,5 +28,9 @@ public class PurchaseOrderLineConfiguration : IEntityTypeConfiguration<PurchaseO
             .IsRequired();
 
         builder.HasIndex(x => x.PurchaseOrderId);
+
+        builder.HasIndex(x => x.Sku)
+            .HasDatabaseName("IX_PurchaseOrderLines_Sku_Open")
+            .IncludeProperties(x => new { x.QuantityOrdered, x.QuantityReceived });
     }
 }

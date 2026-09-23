@@ -1,4 +1,5 @@
 using InventorySync.Core.Entities;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -43,5 +44,10 @@ public class PurchaseOrderConfiguration : IEntityTypeConfiguration<PurchaseOrder
             .WithOne()
             .HasForeignKey(x => x.PurchaseOrderId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(x => x.Status)
+            .HasDatabaseName("IX_PurchaseOrders_OpenByStatus")
+            .HasFilter("Status IN (1, 2)")
+            .IncludeProperties(x => new { x.Id, x.PoNumber });
     }
 }

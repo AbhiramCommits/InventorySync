@@ -1,10 +1,13 @@
 using System.Net;
+
 using InventorySync.Core.Dtos.Erp;
 using InventorySync.Infrastructure.Erp;
+
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Http;
+
 using Polly;
 using Polly.CircuitBreaker;
 

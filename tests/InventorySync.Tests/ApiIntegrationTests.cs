@@ -1,19 +1,21 @@
 using System.Net;
 using System.Net.Http.Json;
+
 using InventorySync.Core.Dtos;
 using InventorySync.Core.Enums;
+using InventorySync.Core.Interfaces;
 using InventorySync.Core.Options;
 using InventorySync.Infrastructure.Data;
+using InventorySync.Infrastructure.Erp;
+
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http;
-using InventorySync.Core.Interfaces;
-using InventorySync.Infrastructure.Erp;
+using Microsoft.Extensions.Options;
 
 namespace InventorySync.Tests;
 

@@ -2,6 +2,7 @@ using InventorySync.Core.Dtos;
 using InventorySync.Core.Entities;
 using InventorySync.Core.Interfaces;
 using InventorySync.Infrastructure.Data;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace InventorySync.Infrastructure.Repositories;
@@ -29,6 +30,11 @@ public class PurchaseOrderRepository : IPurchaseOrderRepository
     public async Task<PagedResult<PurchaseOrder>> GetPagedAsync(PurchaseOrderQuery query, CancellationToken ct = default)
     {
         var filtered = _context.PurchaseOrders.AsNoTracking();
+
+        if (query.IncludeLines)
+        {
+            filtered = filtered.Include(x => x.Lines);
+        }
 
         if (!string.IsNullOrWhiteSpace(query.Search))
         {

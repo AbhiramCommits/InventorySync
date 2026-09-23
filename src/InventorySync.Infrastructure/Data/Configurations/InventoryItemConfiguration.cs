@@ -1,4 +1,5 @@
 using InventorySync.Core.Entities;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -44,5 +45,13 @@ public class InventoryItemConfiguration : IEntityTypeConfiguration<InventoryItem
             .IsRowVersion();
 
         builder.HasIndex(x => new { x.WarehouseCode, x.LastSyncedUtc });
+
+        builder.HasIndex(x => new { x.WarehouseCode, x.QuantityOnHand })
+            .HasDatabaseName("IX_InventoryItems_LowStock")
+            .HasFilter("QuantityOnHand < 25");
+
+        builder.HasIndex(x => x.WarehouseCode)
+            .HasDatabaseName("IX_InventoryItems_Whse_Valuation")
+            .IncludeProperties(x => new { x.QuantityOnHand, x.UnitCost });
     }
 }

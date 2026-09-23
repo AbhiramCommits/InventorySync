@@ -1,5 +1,6 @@
 using InventorySync.Api.Data;
 using InventorySync.Infrastructure.Data;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 

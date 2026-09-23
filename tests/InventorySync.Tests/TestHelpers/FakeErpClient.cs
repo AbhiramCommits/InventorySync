@@ -18,7 +18,7 @@ internal sealed class FakeErpClient : IErpClient
     {
     }
 
-    private FakeErpClient(IEnumerable<ErpInventoryItemRecord>? items, IEnumerable<ErpPurchaseOrderRecord>? orders)
+    public FakeErpClient(IEnumerable<ErpInventoryItemRecord>? items, IEnumerable<ErpPurchaseOrderRecord>? orders)
     {
         _items = items?.ToList() ?? new List<ErpInventoryItemRecord>();
         _orders = orders?.ToList() ?? new List<ErpPurchaseOrderRecord>();

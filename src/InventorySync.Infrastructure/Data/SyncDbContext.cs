@@ -1,4 +1,5 @@
 using InventorySync.Core.Entities;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace InventorySync.Infrastructure.Data;

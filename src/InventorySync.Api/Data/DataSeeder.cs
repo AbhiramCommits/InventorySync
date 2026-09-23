@@ -1,8 +1,10 @@
 using System.Diagnostics;
+
 using InventorySync.Core.Dtos;
 using InventorySync.Core.Entities;
 using InventorySync.Infrastructure.Data;
 using InventorySync.Infrastructure.Erp;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace InventorySync.Api.Data;

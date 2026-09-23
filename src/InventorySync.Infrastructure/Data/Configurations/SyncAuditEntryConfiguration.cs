@@ -1,4 +1,5 @@
 using InventorySync.Core.Entities;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -38,6 +39,10 @@ public class SyncAuditEntryConfiguration : IEntityTypeConfiguration<SyncAuditEnt
             .IsRequired();
 
         builder.HasIndex(x => new { x.SyncRunId, x.EntityType });
+
+        builder.HasIndex(x => new { x.Action, x.TimestampUtc })
+            .HasDatabaseName("IX_SyncAuditEntries_Action_TimestampUtc")
+            .IncludeProperties(x => new { x.SyncRunId });
 
         builder.HasOne<SyncRun>()
             .WithMany()

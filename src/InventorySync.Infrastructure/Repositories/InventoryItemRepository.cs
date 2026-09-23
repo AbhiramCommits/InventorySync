@@ -2,6 +2,7 @@ using InventorySync.Core.Dtos;
 using InventorySync.Core.Entities;
 using InventorySync.Core.Interfaces;
 using InventorySync.Infrastructure.Data;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace InventorySync.Infrastructure.Repositories;
@@ -99,6 +100,11 @@ public class InventoryItemRepository : IInventoryItemRepository
     public void Update(InventoryItem item)
     {
         _context.InventoryItems.Update(item);
+    }
+
+    public void SetOriginalRowVersion(InventoryItem item, byte[] rowVersion)
+    {
+        _context.Entry(item).Property(x => x.RowVersion).OriginalValue = rowVersion;
     }
 
     public void Delete(InventoryItem item)

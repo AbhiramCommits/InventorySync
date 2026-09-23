@@ -76,7 +76,16 @@ namespace InventorySync.Infrastructure.Migrations
                     b.HasIndex("Sku")
                         .IsUnique();
 
+                    b.HasIndex("WarehouseCode")
+                        .HasDatabaseName("IX_InventoryItems_Whse_Valuation");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("WarehouseCode"), new[] { "QuantityOnHand", "UnitCost" });
+
                     b.HasIndex("WarehouseCode", "LastSyncedUtc");
+
+                    b.HasIndex("WarehouseCode", "QuantityOnHand")
+                        .HasDatabaseName("IX_InventoryItems_LowStock")
+                        .HasFilter("QuantityOnHand < 25");
 
                     b.ToTable("InventoryItems", (string)null);
                 });
@@ -127,6 +136,12 @@ namespace InventorySync.Infrastructure.Migrations
                     b.HasIndex("PoNumber")
                         .IsUnique();
 
+                    b.HasIndex("Status")
+                        .HasDatabaseName("IX_PurchaseOrders_OpenByStatus")
+                        .HasFilter("Status IN (1, 2)");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("Status"), new[] { "Id", "PoNumber" });
+
                     b.ToTable("PurchaseOrders", (string)null);
                 });
 
@@ -159,6 +174,11 @@ namespace InventorySync.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("PurchaseOrderId");
+
+                    b.HasIndex("Sku")
+                        .HasDatabaseName("IX_PurchaseOrderLines_Sku_Open");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("Sku"), new[] { "QuantityOrdered", "QuantityReceived" });
 
                     b.ToTable("PurchaseOrderLines", (string)null);
                 });
@@ -205,6 +225,11 @@ namespace InventorySync.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Action", "TimestampUtc")
+                        .HasDatabaseName("IX_SyncAuditEntries_Action_TimestampUtc");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("Action", "TimestampUtc"), new[] { "SyncRunId" });
 
                     b.HasIndex("SyncRunId", "EntityType");
 

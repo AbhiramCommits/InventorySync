@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
 namespace InventorySync.Infrastructure.Data;
 
+[ExcludeFromCodeCoverage]
 public class SyncDbContextFactory : IDesignTimeDbContextFactory<SyncDbContext>
 {
     private const string ConnectionString =

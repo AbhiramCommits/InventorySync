@@ -9,6 +9,7 @@ using InventorySync.Infrastructure.Data;
 using InventorySync.Infrastructure.Repositories;
 using InventorySync.Infrastructure.Services;
 using InventorySync.Tests.TestHelpers;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -350,6 +351,7 @@ public class SyncServiceTests
         public Task<Dictionary<string, InventoryItem>> GetBySkusAsync(IReadOnlyCollection<string> skus, CancellationToken ct = default) => _inner.GetBySkusAsync(skus, ct);
         public Task<bool> SkuExistsAsync(string sku, CancellationToken ct = default) => _inner.SkuExistsAsync(sku, ct);
         public void Update(InventoryItem item) => _inner.Update(item);
+        public void SetOriginalRowVersion(InventoryItem item, byte[] rowVersion) => _inner.SetOriginalRowVersion(item, rowVersion);
         public void Delete(InventoryItem item) => _inner.Delete(item);
         public Task<int> SaveChangesAsync(CancellationToken ct = default) => _inner.SaveChangesAsync(ct);
     }

@@ -3,6 +3,7 @@ using InventorySync.Core.Entities;
 using InventorySync.Core.Enums;
 using InventorySync.Core.Interfaces;
 using InventorySync.Infrastructure.Data;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace InventorySync.Infrastructure.Repositories;

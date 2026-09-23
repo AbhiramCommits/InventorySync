@@ -1,6 +1,7 @@
 using InventorySync.Core.Dtos;
 using InventorySync.Core.Enums;
 using InventorySync.Core.Interfaces;
+
 using Microsoft.AspNetCore.Mvc;
 
 namespace InventorySync.Api.Controllers;
@@ -28,6 +29,7 @@ public class PurchaseOrdersController : ControllerBase
     /// <param name="orderDateFrom">Filters orders placed on or after the given UTC instant.</param>
     /// <param name="orderDateTo">Filters orders placed on or before the given UTC instant.</param>
     /// <param name="sort">Sort column: poNumber, vendorCode, status, orderDateUtc, expectedDateUtc, totalAmount. Prefix with '-' for descending.</param>
+    /// <param name="includeLines">When true, loads each order's lines in the same query instead of forcing consumers into N+1 detail calls.</param>
     /// <param name="page">One-based page number.</param>
     /// <param name="pageSize">Page size (max 200).</param>
     /// <param name="ct">Cancellation token.</param>
@@ -39,6 +41,7 @@ public class PurchaseOrdersController : ControllerBase
         [FromQuery] DateTime? orderDateFrom,
         [FromQuery] DateTime? orderDateTo,
         [FromQuery] string sort = "poNumber",
+        [FromQuery] bool includeLines = false,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken ct = default)
@@ -51,6 +54,7 @@ public class PurchaseOrdersController : ControllerBase
             OrderDateFrom = orderDateFrom,
             OrderDateTo = orderDateTo,
             Sort = sort,
+            IncludeLines = includeLines,
             Page = Math.Max(1, page),
             PageSize = Math.Clamp(pageSize, 1, 200),
         };
