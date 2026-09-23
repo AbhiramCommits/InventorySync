@@ -174,6 +174,43 @@ public class ApiIntegrationTests
         Assert.Contains("Healthy", body);
     }
 
+    [Fact]
+    public async Task StaticUi_IsServedFromWwwroot()
+    {
+        using var factory = CreateApiFactory();
+        using var client = factory.CreateClient();
+
+        var index = await client.GetAsync("/");
+        Assert.Equal(HttpStatusCode.OK, index.StatusCode);
+        Assert.Contains("text/html", index.Content.Headers.ContentType!.MediaType);
+        var html = await index.Content.ReadAsStringAsync();
+        Assert.Contains("InventorySync", html);
+        Assert.Contains("/js/main.js", html);
+
+        var js = await client.GetAsync("/js/main.js");
+        Assert.Equal(HttpStatusCode.OK, js.StatusCode);
+        Assert.Contains("text/javascript", js.Content.Headers.ContentType!.MediaType);
+
+        var css = await client.GetAsync("/css/site.css");
+        Assert.Equal(HttpStatusCode.OK, css.StatusCode);
+        Assert.Contains("text/css", css.Content.Headers.ContentType!.MediaType);
+    }
+
+    [Fact]
+    public async Task Cors_AppliesConfiguredPolicy()
+    {
+        using var factory = CreateApiFactory();
+        using var client = factory.CreateClient();
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/inventory?pageSize=1");
+        request.Headers.Add("Origin", "http://localhost:5173");
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("http://localhost:5173", response.Headers.GetValues("Access-Control-Allow-Origin").Single());
+    }
+
     private static TestApiFactory CreateApiFactory()
     {
         var mockErpFactory = new MockErpTestFactory();

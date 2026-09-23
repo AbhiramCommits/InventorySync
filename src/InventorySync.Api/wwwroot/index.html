@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>InventorySync · Ops Console</title>
+  <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="#/inventory">
+      <span class="brand-mark" aria-hidden="true">▦</span>
+      <span class="brand-name">InventorySync</span>
+      <span class="brand-sub">Ops Console</span>
+    </a>
+    <nav class="main-nav" aria-label="Primary">
+      <a href="#/inventory" data-nav="inventory">Inventory</a>
+      <a href="#/orders" data-nav="orders">Orders</a>
+      <a href="#/runs" data-nav="runs">Sync runs</a>
+    </nav>
+    <div class="global-status">
+      <span class="loading-indicator" id="global-loading" hidden aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span> Loading…
+      </span>
+    </div>
+  </header>
+
+  <main id="app" class="app-main" tabindex="-1"></main>
+
+  <footer class="app-footer">
+    <span>InventorySync ERP integration service</span>
+    <span class="footer-dot">·</span>
+    <a href="/swagger/index.html" target="_blank" rel="noopener">API docs</a>
+    <span class="footer-dot">·</span>
+    <a href="/health" target="_blank" rel="noopener">Health</a>
+  </footer>
+
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="false"></div>
+  <div id="dialog-root"></div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

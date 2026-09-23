@@ -57,6 +57,25 @@ builder.Services.AddDbContext<SyncDbContext>(options =>
 builder.Services.Configure<ErpOptions>(builder.Configuration.GetSection(ErpOptions.SectionName));
 builder.Services.Configure<SyncOptions>(builder.Configuration.GetSection(SyncOptions.SectionName));
 
+var corsOrigins = builder.Configuration.GetSection(CorsOptions.SectionName)
+    .GetSection(nameof(CorsOptions.AllowedOrigins))
+    .Get<string[]>() ?? Array.Empty<string>();
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(CorsOptions.PolicyName, policy =>
+    {
+        if (corsOrigins.Length == 0 || corsOrigins.Contains("*", StringComparer.Ordinal))
+        {
+            policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+        }
+        else
+        {
+            policy.WithOrigins(corsOrigins).AllowAnyMethod().AllowAnyHeader();
+        }
+    });
+});
+
 builder.Services.AddHttpClient<IErpClient, ErpHttpClient>((sp, client) =>
     {
         var erpOptions = sp.GetRequiredService<IOptions<ErpOptions>>().Value;
@@ -102,6 +121,10 @@ using (var scope = app.Services.CreateScope())
 
 app.UseSerilogRequestLogging();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+
+app.UseCors(CorsOptions.PolicyName);
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 if (app.Environment.IsDevelopment())
 {
