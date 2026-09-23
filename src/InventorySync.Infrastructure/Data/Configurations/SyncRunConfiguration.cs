@@ -25,6 +25,11 @@ public class SyncRunConfiguration : IEntityTypeConfiguration<SyncRun>
             .HasMaxLength(100)
             .IsRequired();
 
+        builder.HasOne(x => x.ParentSyncRun)
+            .WithMany()
+            .HasForeignKey(x => x.ParentSyncRunId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(x => new { x.EntityType, x.StartedUtc });
     }
 }

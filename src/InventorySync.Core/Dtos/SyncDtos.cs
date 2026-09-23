@@ -6,6 +6,8 @@ public class SyncRunDto
 {
     public int Id { get; set; }
 
+    public int? ParentSyncRunId { get; set; }
+
     public SyncEntityType EntityType { get; set; }
 
     public DateTime StartedUtc { get; set; }
@@ -46,25 +48,4 @@ public class SyncAuditEntryDto
     public string? Message { get; set; }
 
     public DateTime TimestampUtc { get; set; }
-}
-
-public class SyncResultDto
-{
-    public int SyncRunId { get; set; }
-
-    public SyncEntityType EntityType { get; set; }
-
-    public SyncRunStatus Status { get; set; }
-
-    public DateTime StartedUtc { get; set; }
-
-    public DateTime? CompletedUtc { get; set; }
-
-    public int RecordsRead { get; set; }
-
-    public int RecordsInserted { get; set; }
-
-    public int RecordsUpdated { get; set; }
-
-    public int RecordsFailed { get; set; }
 }

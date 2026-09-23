@@ -5,11 +5,15 @@ namespace InventorySync.Core.Interfaces;
 
 public interface ISyncService
 {
-    Task<SyncResultDto> SyncInventoryAsync(string triggeredBy, CancellationToken ct = default);
+    Task<SyncRunDto> SyncInventoryAsync(string triggeredBy, CancellationToken ct = default);
 
-    Task<SyncResultDto> SyncPurchaseOrdersAsync(string triggeredBy, CancellationToken ct = default);
+    Task<SyncRunDto> SyncPurchaseOrdersAsync(string triggeredBy, CancellationToken ct = default);
 
-    Task<PagedResult<SyncRunDto>> GetRunsAsync(SyncEntityType? entityType, int page, int pageSize, CancellationToken ct = default);
+    Task<SyncRunDto> RetryFailedRecordsAsync(int syncRunId, CancellationToken ct = default);
 
-    Task<IReadOnlyList<SyncAuditEntryDto>> GetAuditEntriesAsync(int syncRunId, int page, int pageSize, CancellationToken ct = default);
+    Task<PagedResult<SyncRunDto>> GetRunsAsync(SyncEntityType? entityType, SyncRunStatus? status, int page, int pageSize, CancellationToken ct = default);
+
+    Task<SyncRunDto> GetRunByIdAsync(int id, CancellationToken ct = default);
+
+    Task<PagedResult<SyncAuditEntryDto>> GetAuditEntriesAsync(int syncRunId, SyncAuditAction? action, int page, int pageSize, CancellationToken ct = default);
 }

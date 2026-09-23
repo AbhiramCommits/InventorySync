@@ -1,6 +1,5 @@
 using InventorySync.Core.Dtos;
 using InventorySync.Core.Entities;
-using InventorySync.Core.Enums;
 using InventorySync.Core.Interfaces;
 using InventorySync.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +8,17 @@ namespace InventorySync.Infrastructure.Repositories;
 
 public class PurchaseOrderRepository : IPurchaseOrderRepository
 {
+    private static readonly IReadOnlyDictionary<string, string> SortColumns =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["poNumber"] = nameof(PurchaseOrder.PoNumber),
+            ["vendorCode"] = nameof(PurchaseOrder.VendorCode),
+            ["status"] = nameof(PurchaseOrder.Status),
+            ["orderDateUtc"] = nameof(PurchaseOrder.OrderDateUtc),
+            ["expectedDateUtc"] = nameof(PurchaseOrder.ExpectedDateUtc),
+            ["totalAmount"] = nameof(PurchaseOrder.TotalAmount),
+        };
+
     private readonly SyncDbContext _context;
 
     public PurchaseOrderRepository(SyncDbContext context)
@@ -16,31 +26,46 @@ public class PurchaseOrderRepository : IPurchaseOrderRepository
         _context = context;
     }
 
-    public async Task<PagedResult<PurchaseOrder>> GetPagedAsync(
-        PurchaseOrderStatus? status,
-        int page,
-        int pageSize,
-        CancellationToken ct = default)
+    public async Task<PagedResult<PurchaseOrder>> GetPagedAsync(PurchaseOrderQuery query, CancellationToken ct = default)
     {
-        var query = _context.PurchaseOrders.AsNoTracking();
+        var filtered = _context.PurchaseOrders.AsNoTracking();
 
-        if (status.HasValue)
+        if (!string.IsNullOrWhiteSpace(query.Search))
         {
-            query = query.Where(x => x.Status == status.Value);
+            filtered = filtered.Where(x => x.PoNumber.Contains(query.Search));
         }
 
-        var totalCount = await query.CountAsync(ct);
-        var items = await query
-            .OrderBy(x => x.PoNumber)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+        if (!string.IsNullOrWhiteSpace(query.VendorCode))
+        {
+            filtered = filtered.Where(x => x.VendorCode == query.VendorCode);
+        }
+
+        if (query.Status.HasValue)
+        {
+            filtered = filtered.Where(x => x.Status == query.Status.Value);
+        }
+
+        if (query.OrderDateFrom.HasValue)
+        {
+            filtered = filtered.Where(x => x.OrderDateUtc >= query.OrderDateFrom.Value);
+        }
+
+        if (query.OrderDateTo.HasValue)
+        {
+            filtered = filtered.Where(x => x.OrderDateUtc <= query.OrderDateTo.Value);
+        }
+
+        var totalCount = await filtered.CountAsync(ct);
+        var items = await ApplySorting(filtered, query.Sort)
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
             .ToListAsync(ct);
 
         return new PagedResult<PurchaseOrder>
         {
             Items = items,
-            Page = page,
-            PageSize = pageSize,
+            Page = query.Page,
+            PageSize = query.PageSize,
             TotalCount = totalCount,
         };
     }
@@ -92,5 +117,20 @@ public class PurchaseOrderRepository : IPurchaseOrderRepository
     public Task<int> SaveChangesAsync(CancellationToken ct = default)
     {
         return _context.SaveChangesAsync(ct);
+    }
+
+    private static IQueryable<PurchaseOrder> ApplySorting(IQueryable<PurchaseOrder> query, string sort)
+    {
+        var descending = sort.StartsWith('-');
+        var column = descending ? sort[1..] : sort;
+
+        if (!SortColumns.TryGetValue(column, out var property))
+        {
+            property = nameof(PurchaseOrder.PoNumber);
+        }
+
+        return descending
+            ? query.OrderByDescending(x => EF.Property<object>(x, property))
+            : query.OrderBy(x => EF.Property<object>(x, property));
     }
 }

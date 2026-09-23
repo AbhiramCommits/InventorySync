@@ -77,7 +77,7 @@ public static class DataSeeder
         Console.WriteLine($"Seed completed in {stopwatch.Elapsed}. Items: {seededItems:N0}, purchase orders: {seededOrders:N0}.");
     }
 
-    private static InventoryItem ToEntity(ErpInventoryRecord record)
+    private static InventoryItem ToEntity(SeedInventoryRecord record)
     {
         return new InventoryItem
         {
@@ -92,7 +92,7 @@ public static class DataSeeder
         };
     }
 
-    private static PurchaseOrder ToEntity(ErpPurchaseOrderRecord record)
+    private static PurchaseOrder ToEntity(SeedPurchaseOrderRecord record)
     {
         return new PurchaseOrder
         {

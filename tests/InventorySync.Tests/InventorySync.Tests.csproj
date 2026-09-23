@@ -26,6 +26,7 @@
     <ProjectReference Include="..\..\src\InventorySync.Api\InventorySync.Api.csproj" />
     <ProjectReference Include="..\..\src\InventorySync.Core\InventorySync.Core.csproj" />
     <ProjectReference Include="..\..\src\InventorySync.Infrastructure\InventorySync.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\MockErp\MockErp.csproj" />
   </ItemGroup>
 
 </Project>

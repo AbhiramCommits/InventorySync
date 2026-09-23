@@ -1,55 +1,54 @@
 using System.Globalization;
 using InventorySync.Core.Dtos;
+using InventorySync.Core.Dtos.Erp;
 using InventorySync.Core.Entities;
 using InventorySync.Core.Enums;
 using InventorySync.Core.Exceptions;
 using InventorySync.Core.Interfaces;
+using InventorySync.Core.Mapping;
+using InventorySync.Core.Options;
+using InventorySync.Infrastructure.Erp;
+using Microsoft.Extensions.Options;
 
 namespace InventorySync.Infrastructure.Services;
 
 public class SyncService : ISyncService
 {
-    private const int BatchSize = 500;
+    private const string ConflictMessage =
+        "The record had local changes and the ERP value differs; the conflict was resolved per the configured strategy.";
+
+    private const string UnknownKey = "(unknown)";
 
     private readonly IInventoryItemRepository _inventoryRepository;
     private readonly IPurchaseOrderRepository _purchaseOrderRepository;
     private readonly ISyncRepository _syncRepository;
-    private readonly IErpConnector _erpConnector;
+    private readonly IErpClient _erpClient;
+    private readonly IOptions<SyncOptions> _options;
 
     public SyncService(
         IInventoryItemRepository inventoryRepository,
         IPurchaseOrderRepository purchaseOrderRepository,
         ISyncRepository syncRepository,
-        IErpConnector erpConnector)
+        IErpClient erpClient,
+        IOptions<SyncOptions> options)
     {
         _inventoryRepository = inventoryRepository;
         _purchaseOrderRepository = purchaseOrderRepository;
         _syncRepository = syncRepository;
-        _erpConnector = erpConnector;
+        _erpClient = erpClient;
+        _options = options;
     }
 
-    public async Task<SyncResultDto> SyncInventoryAsync(string triggeredBy, CancellationToken ct = default)
+    private SyncOptions Options => _options.Value;
+
+    public async Task<SyncRunDto> SyncInventoryAsync(string triggeredBy, CancellationToken ct = default)
     {
-        var run = await BeginRunAsync(SyncEntityType.InventoryItem, triggeredBy, ct);
-        var auditBuffer = new List<SyncAuditEntry>();
+        var run = await BeginRunAsync(SyncEntityType.InventoryItem, triggeredBy, null, ct);
 
         try
         {
-            var batch = new List<ErpInventoryRecord>(BatchSize);
-            await foreach (var record in _erpConnector.GetInventoryRecordsAsync(ct).WithCancellation(ct))
-            {
-                batch.Add(record);
-                if (batch.Count >= BatchSize)
-                {
-                    await ProcessInventoryBatchAsync(run, batch, auditBuffer, ct);
-                    batch = new List<ErpInventoryRecord>(BatchSize);
-                }
-            }
-
-            if (batch.Count > 0)
-            {
-                await ProcessInventoryBatchAsync(run, batch, auditBuffer, ct);
-            }
+            var records = await _erpClient.GetInventoryAsync(null, ct);
+            await ExecuteInventorySyncAsync(run, records, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -58,31 +57,17 @@ public class SyncService : ISyncService
         }
 
         await CompleteRunAsync(run, ct);
-        return DtoMapper.ToSyncResult(run);
+        return DtoMapper.ToDto(run);
     }
 
-    public async Task<SyncResultDto> SyncPurchaseOrdersAsync(string triggeredBy, CancellationToken ct = default)
+    public async Task<SyncRunDto> SyncPurchaseOrdersAsync(string triggeredBy, CancellationToken ct = default)
     {
-        var run = await BeginRunAsync(SyncEntityType.PurchaseOrder, triggeredBy, ct);
-        var auditBuffer = new List<SyncAuditEntry>();
+        var run = await BeginRunAsync(SyncEntityType.PurchaseOrder, triggeredBy, null, ct);
 
         try
         {
-            var batch = new List<ErpPurchaseOrderRecord>(BatchSize);
-            await foreach (var record in _erpConnector.GetPurchaseOrderRecordsAsync(ct).WithCancellation(ct))
-            {
-                batch.Add(record);
-                if (batch.Count >= BatchSize)
-                {
-                    await ProcessPurchaseOrderBatchAsync(run, batch, auditBuffer, ct);
-                    batch = new List<ErpPurchaseOrderRecord>(BatchSize);
-                }
-            }
-
-            if (batch.Count > 0)
-            {
-                await ProcessPurchaseOrderBatchAsync(run, batch, auditBuffer, ct);
-            }
+            var records = await _erpClient.GetPurchaseOrdersAsync(null, ct);
+            await ExecutePurchaseOrderSyncAsync(run, records, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -91,16 +76,62 @@ public class SyncService : ISyncService
         }
 
         await CompleteRunAsync(run, ct);
-        return DtoMapper.ToSyncResult(run);
+        return DtoMapper.ToDto(run);
+    }
+
+    public async Task<SyncRunDto> RetryFailedRecordsAsync(int syncRunId, CancellationToken ct = default)
+    {
+        var parent = await _syncRepository.GetRunByIdAsync(syncRunId, ct)
+            ?? throw new EntityNotFoundException($"Sync run with id {syncRunId} was not found.");
+
+        if (parent.ParentSyncRunId is not null)
+        {
+            throw new InvalidOperationException($"Run {syncRunId} is itself a retry run and cannot be retried.");
+        }
+
+        var errors = await _syncRepository.GetAuditEntriesByActionAsync(parent.Id, SyncAuditAction.Error, ct);
+        var keys = errors
+            .Select(e => e.EntityKey)
+            .Where(k => !string.IsNullOrWhiteSpace(k) && !string.Equals(k, UnknownKey, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var child = await BeginRunAsync(parent.EntityType, parent.TriggeredBy, parent.Id, ct);
+
+        try
+        {
+            if (keys.Count > 0)
+            {
+                if (parent.EntityType == SyncEntityType.InventoryItem)
+                {
+                    var records = await _erpClient.GetInventoryBySkusAsync(keys, ct);
+                    await ExecuteInventorySyncAsync(child, records, ct);
+                }
+                else
+                {
+                    var records = await _erpClient.GetPurchaseOrdersByNumbersAsync(keys, ct);
+                    await ExecutePurchaseOrderSyncAsync(child, records, ct);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await FailRunAsync(child, ct);
+            throw;
+        }
+
+        await CompleteRunAsync(child, ct);
+        return DtoMapper.ToDto(child);
     }
 
     public async Task<PagedResult<SyncRunDto>> GetRunsAsync(
         SyncEntityType? entityType,
+        SyncRunStatus? status,
         int page,
         int pageSize,
         CancellationToken ct = default)
     {
-        var result = await _syncRepository.GetRunsAsync(entityType, page, pageSize, ct);
+        var result = await _syncRepository.GetRunsAsync(entityType, status, page, pageSize, ct);
 
         return new PagedResult<SyncRunDto>
         {
@@ -111,8 +142,17 @@ public class SyncService : ISyncService
         };
     }
 
-    public async Task<IReadOnlyList<SyncAuditEntryDto>> GetAuditEntriesAsync(
+    public async Task<SyncRunDto> GetRunByIdAsync(int id, CancellationToken ct = default)
+    {
+        var run = await _syncRepository.GetRunByIdAsync(id, ct)
+            ?? throw new EntityNotFoundException($"Sync run with id {id} was not found.");
+
+        return DtoMapper.ToDto(run);
+    }
+
+    public async Task<PagedResult<SyncAuditEntryDto>> GetAuditEntriesAsync(
         int syncRunId,
+        SyncAuditAction? action,
         int page,
         int pageSize,
         CancellationToken ct = default)
@@ -122,14 +162,23 @@ public class SyncService : ISyncService
             throw new EntityNotFoundException($"Sync run with id {syncRunId} was not found.");
         }
 
-        var entries = await _syncRepository.GetAuditEntriesAsync(syncRunId, (page - 1) * pageSize, pageSize, ct);
-        return entries.Select(DtoMapper.ToDto).ToList();
+        var totalCount = await _syncRepository.CountAuditEntriesAsync(syncRunId, action, ct);
+        var entries = await _syncRepository.GetAuditEntriesAsync(syncRunId, action, (page - 1) * pageSize, pageSize, ct);
+
+        return new PagedResult<SyncAuditEntryDto>
+        {
+            Items = entries.Select(DtoMapper.ToDto).ToList(),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+        };
     }
 
-    private async Task<SyncRun> BeginRunAsync(SyncEntityType entityType, string triggeredBy, CancellationToken ct)
+    private async Task<SyncRun> BeginRunAsync(SyncEntityType entityType, string triggeredBy, int? parentSyncRunId, CancellationToken ct)
     {
         var run = new SyncRun
         {
+            ParentSyncRunId = parentSyncRunId,
             EntityType = entityType,
             StartedUtc = DateTime.UtcNow,
             Status = SyncRunStatus.Running,
@@ -156,170 +205,220 @@ public class SyncService : ISyncService
         await _syncRepository.SaveChangesAsync(ct);
     }
 
-    private async Task ProcessInventoryBatchAsync(
-        SyncRun run,
-        IReadOnlyList<ErpInventoryRecord> batch,
-        List<SyncAuditEntry> auditBuffer,
-        CancellationToken ct)
+    private async Task ExecuteInventorySyncAsync(SyncRun run, IReadOnlyList<ErpInventoryItemRecord> records, CancellationToken ct)
     {
-        var skus = batch.Select(r => r.Sku).Distinct().ToList();
-        var existing = await _inventoryRepository.GetBySkusAsync(skus, ct);
+        var auditBuffer = new List<SyncAuditEntry>();
 
-        foreach (var record in batch)
+        foreach (var batch in records.Chunk(Math.Max(1, Options.PageSize)))
         {
-            run.RecordsRead++;
+            var mapped = batch
+                .Select(record => (Record: record, Result: ErpRecordMapper.MapInventoryItem(record)))
+                .ToList();
 
-            try
+            foreach (var entry in mapped.Where(m => !m.Result.IsSuccess))
             {
-                if (existing.TryGetValue(record.Sku, out var item))
-                {
-                    ApplyInventoryChanges(item, record, run, auditBuffer);
-                }
-                else
-                {
-                    item = ToEntity(record);
-                    await _inventoryRepository.AddAsync(item, ct);
-                    run.RecordsInserted++;
-                    auditBuffer.Add(CreateAudit(
-                        run.Id,
-                        SyncEntityType.InventoryItem,
-                        record.Sku,
-                        SyncAuditAction.Insert,
-                        fieldName: null,
-                        oldValue: null,
-                        newValue: null,
-                        message: null));
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
+                run.RecordsRead++;
                 run.RecordsFailed++;
+                var key = string.IsNullOrWhiteSpace(entry.Record.Sku) ? UnknownKey : entry.Record.Sku.Trim();
                 auditBuffer.Add(CreateAudit(
                     run.Id,
                     SyncEntityType.InventoryItem,
-                    record.Sku,
+                    key,
                     SyncAuditAction.Error,
                     fieldName: null,
                     oldValue: null,
                     newValue: null,
-                    message: ex.Message));
+                    message: FormatFieldErrors(entry.Result.Errors)));
             }
-        }
 
-        await _inventoryRepository.SaveChangesAsync(ct);
-        FlushAudits(auditBuffer);
-        await _syncRepository.SaveChangesAsync(ct);
-    }
+            var skus = mapped
+                .Where(m => m.Result.IsSuccess)
+                .Select(m => m.Result.Value!.Sku)
+                .ToList();
 
-    private async Task ProcessPurchaseOrderBatchAsync(
-        SyncRun run,
-        IReadOnlyList<ErpPurchaseOrderRecord> batch,
-        List<SyncAuditEntry> auditBuffer,
-        CancellationToken ct)
-    {
-        var poNumbers = batch.Select(r => r.PoNumber).Distinct().ToList();
-        var existing = await _purchaseOrderRepository.GetByPoNumbersAsync(poNumbers, ct);
+            var existing = await _inventoryRepository.GetBySkusAsync(skus, ct);
 
-        foreach (var record in batch)
-        {
-            run.RecordsRead++;
-
-            try
+            foreach (var entry in mapped.Where(m => m.Result.IsSuccess))
             {
-                if (existing.TryGetValue(record.PoNumber, out var order))
+                run.RecordsRead++;
+                var mappedItem = entry.Result.Value!;
+
+                try
                 {
-                    ApplyPurchaseOrderChanges(order, record, run, auditBuffer);
+                    if (existing.TryGetValue(mappedItem.Sku, out var item))
+                    {
+                        ApplyInventoryChanges(item, mappedItem, run, auditBuffer);
+                    }
+                    else
+                    {
+                        await _inventoryRepository.AddAsync(mappedItem, ct);
+                        run.RecordsInserted++;
+                        auditBuffer.Add(CreateAudit(
+                            run.Id,
+                            SyncEntityType.InventoryItem,
+                            mappedItem.Sku,
+                            SyncAuditAction.Insert,
+                            fieldName: null,
+                            oldValue: null,
+                            newValue: null,
+                            message: null));
+                    }
                 }
-                else
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    order = ToEntity(record);
-                    await _purchaseOrderRepository.AddAsync(order, ct);
-                    run.RecordsInserted++;
+                    run.RecordsFailed++;
                     auditBuffer.Add(CreateAudit(
                         run.Id,
-                        SyncEntityType.PurchaseOrder,
-                        record.PoNumber,
-                        SyncAuditAction.Insert,
+                        SyncEntityType.InventoryItem,
+                        mappedItem.Sku,
+                        SyncAuditAction.Error,
                         fieldName: null,
                         oldValue: null,
                         newValue: null,
-                        message: $"Inserted purchase order with {record.Lines.Count} lines."));
+                        message: ex.Message));
                 }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+
+            await _inventoryRepository.SaveChangesAsync(ct);
+            FlushAudits(auditBuffer);
+            await _syncRepository.SaveChangesAsync(ct);
+        }
+    }
+
+    private async Task ExecutePurchaseOrderSyncAsync(SyncRun run, IReadOnlyList<ErpPurchaseOrderRecord> records, CancellationToken ct)
+    {
+        var auditBuffer = new List<SyncAuditEntry>();
+
+        foreach (var batch in records.Chunk(Math.Max(1, Options.PageSize)))
+        {
+            var mapped = batch
+                .Select(record => (Record: record, Result: ErpRecordMapper.MapPurchaseOrder(record)))
+                .ToList();
+
+            foreach (var entry in mapped.Where(m => !m.Result.IsSuccess))
             {
+                run.RecordsRead++;
                 run.RecordsFailed++;
+                var key = string.IsNullOrWhiteSpace(entry.Record.PoNumber) ? UnknownKey : entry.Record.PoNumber.Trim();
                 auditBuffer.Add(CreateAudit(
                     run.Id,
                     SyncEntityType.PurchaseOrder,
-                    record.PoNumber,
+                    key,
                     SyncAuditAction.Error,
                     fieldName: null,
                     oldValue: null,
                     newValue: null,
-                    message: ex.Message));
+                    message: FormatFieldErrors(entry.Result.Errors)));
+            }
+
+            var poNumbers = mapped
+                .Where(m => m.Result.IsSuccess)
+                .Select(m => m.Result.Value!.PoNumber)
+                .ToList();
+
+            var existing = await _purchaseOrderRepository.GetByPoNumbersAsync(poNumbers, ct);
+
+            foreach (var entry in mapped.Where(m => m.Result.IsSuccess))
+            {
+                run.RecordsRead++;
+                var mappedOrder = entry.Result.Value!;
+
+                try
+                {
+                    if (existing.TryGetValue(mappedOrder.PoNumber, out var order))
+                    {
+                        ApplyPurchaseOrderChanges(order, mappedOrder, run, auditBuffer);
+                    }
+                    else
+                    {
+                        await _purchaseOrderRepository.AddAsync(mappedOrder, ct);
+                        run.RecordsInserted++;
+                        auditBuffer.Add(CreateAudit(
+                            run.Id,
+                            SyncEntityType.PurchaseOrder,
+                            mappedOrder.PoNumber,
+                            SyncAuditAction.Insert,
+                            fieldName: null,
+                            oldValue: null,
+                            newValue: null,
+                            message: $"Inserted purchase order with {mappedOrder.Lines.Count} lines."));
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    run.RecordsFailed++;
+                    auditBuffer.Add(CreateAudit(
+                        run.Id,
+                        SyncEntityType.PurchaseOrder,
+                        mappedOrder.PoNumber,
+                        SyncAuditAction.Error,
+                        fieldName: null,
+                        oldValue: null,
+                        newValue: null,
+                        message: ex.Message));
+                }
+            }
+
+            await _purchaseOrderRepository.SaveChangesAsync(ct);
+            FlushAudits(auditBuffer);
+            await _syncRepository.SaveChangesAsync(ct);
+        }
+    }
+
+    private void ApplyInventoryChanges(InventoryItem item, InventoryItem mapped, SyncRun run, List<SyncAuditEntry> auditBuffer)
+    {
+        var timestamp = DateTime.UtcNow;
+        var erpModifiedUtc = mapped.LastSyncedUtc ?? timestamp;
+        var erpApplied = false;
+        var localKept = false;
+
+        void SyncField<T>(string fieldName, T localValue, T erpValue, Action<T> setter, Func<T, string?> format)
+        {
+            if (EqualityComparer<T>.Default.Equals(localValue, erpValue))
+            {
+                return;
+            }
+
+            var oldText = format(localValue);
+            var newText = format(erpValue);
+
+            if (item.LocallyModifiedUtc is null)
+            {
+                setter(erpValue);
+
+                erpApplied = true;
+                AddFieldAudit(auditBuffer, run.Id, SyncEntityType.InventoryItem, item.Sku, fieldName, oldText, newText, timestamp);
+            }
+            else if (ShouldErpWin(erpModifiedUtc, item.LocallyModifiedUtc))
+            {
+                setter(erpValue);
+
+                erpApplied = true;
+                AddFieldAudit(auditBuffer, run.Id, SyncEntityType.InventoryItem, item.Sku, fieldName, oldText, newText, timestamp, SyncAuditAction.ConflictResolved, ConflictMessage);
+            }
+            else
+            {
+                localKept = true;
+                AddFieldAudit(auditBuffer, run.Id, SyncEntityType.InventoryItem, item.Sku, fieldName, newText, oldText, timestamp, SyncAuditAction.ConflictResolved, ConflictMessage);
             }
         }
 
-        await _purchaseOrderRepository.SaveChangesAsync(ct);
-        FlushAudits(auditBuffer);
-        await _syncRepository.SaveChangesAsync(ct);
-    }
+        SyncField("Name", item.Name, mapped.Name, v => item.Name = v, v => v);
+        SyncField("Description", item.Description, mapped.Description, v => item.Description = v, v => v);
+        SyncField("QuantityOnHand", item.QuantityOnHand, mapped.QuantityOnHand, v => item.QuantityOnHand = v, ToAuditValue);
+        SyncField("UnitCost", item.UnitCost, mapped.UnitCost, v => item.UnitCost = v, ToAuditValue);
+        SyncField("WarehouseCode", item.WarehouseCode, mapped.WarehouseCode, v => item.WarehouseCode = v, v => v);
+        SyncField("ErpRecordId", item.ErpRecordId, mapped.ErpRecordId, v => item.ErpRecordId = v, v => v);
 
-    private static void ApplyInventoryChanges(
-        InventoryItem item,
-        ErpInventoryRecord record,
-        SyncRun run,
-        List<SyncAuditEntry> auditBuffer)
-    {
-        var timestamp = DateTime.UtcNow;
-        var changed = false;
-
-        if (!string.Equals(item.Name, record.Name, StringComparison.Ordinal))
+        if (erpApplied)
         {
-            AddFieldAudit(auditBuffer, run.Id, SyncEntityType.InventoryItem, record.Sku, "Name", item.Name, record.Name, timestamp);
-            item.Name = record.Name;
-            changed = true;
+            item.LastSyncedUtc = mapped.LastSyncedUtc;
+            item.LocallyModifiedUtc = null;
+            run.RecordsUpdated++;
         }
-
-        if (!string.Equals(item.Description, record.Description, StringComparison.Ordinal))
+        else if (localKept)
         {
-            AddFieldAudit(auditBuffer, run.Id, SyncEntityType.InventoryItem, record.Sku, "Description", item.Description, record.Description, timestamp);
-            item.Description = record.Description;
-            changed = true;
-        }
-
-        if (item.QuantityOnHand != record.QuantityOnHand)
-        {
-            AddFieldAudit(auditBuffer, run.Id, SyncEntityType.InventoryItem, record.Sku, "QuantityOnHand", ToAuditValue(item.QuantityOnHand), ToAuditValue(record.QuantityOnHand), timestamp);
-            item.QuantityOnHand = record.QuantityOnHand;
-            changed = true;
-        }
-
-        if (item.UnitCost != record.UnitCost)
-        {
-            AddFieldAudit(auditBuffer, run.Id, SyncEntityType.InventoryItem, record.Sku, "UnitCost", ToAuditValue(item.UnitCost), ToAuditValue(record.UnitCost), timestamp);
-            item.UnitCost = record.UnitCost;
-            changed = true;
-        }
-
-        if (!string.Equals(item.WarehouseCode, record.WarehouseCode, StringComparison.Ordinal))
-        {
-            AddFieldAudit(auditBuffer, run.Id, SyncEntityType.InventoryItem, record.Sku, "WarehouseCode", item.WarehouseCode, record.WarehouseCode, timestamp);
-            item.WarehouseCode = record.WarehouseCode;
-            changed = true;
-        }
-
-        if (!string.Equals(item.ErpRecordId, record.ErpRecordId, StringComparison.Ordinal))
-        {
-            AddFieldAudit(auditBuffer, run.Id, SyncEntityType.InventoryItem, record.Sku, "ErpRecordId", item.ErpRecordId, record.ErpRecordId, timestamp);
-            item.ErpRecordId = record.ErpRecordId;
-            changed = true;
-        }
-
-        if (changed)
-        {
-            item.LastSyncedUtc = record.ModifiedUtc;
+            item.LastSyncedUtc = mapped.LastSyncedUtc;
             run.RecordsUpdated++;
         }
         else
@@ -327,7 +426,7 @@ public class SyncService : ISyncService
             auditBuffer.Add(CreateAudit(
                 run.Id,
                 SyncEntityType.InventoryItem,
-                record.Sku,
+                item.Sku,
                 SyncAuditAction.Skip,
                 fieldName: null,
                 oldValue: null,
@@ -337,78 +436,99 @@ public class SyncService : ISyncService
         }
     }
 
-    private static void ApplyPurchaseOrderChanges(
-        PurchaseOrder order,
-        ErpPurchaseOrderRecord record,
-        SyncRun run,
-        List<SyncAuditEntry> auditBuffer)
+    private void ApplyPurchaseOrderChanges(PurchaseOrder order, PurchaseOrder mapped, SyncRun run, List<SyncAuditEntry> auditBuffer)
     {
         var timestamp = DateTime.UtcNow;
+        var erpModifiedUtc = mapped.LastSyncedUtc ?? timestamp;
         var entityType = SyncEntityType.PurchaseOrder;
-        var entityKey = record.PoNumber;
-        var changed = false;
+        var entityKey = order.PoNumber;
+        var erpApplied = false;
+        var localKept = false;
 
-        var effectiveStatus = StatusRank(record.Status) >= StatusRank(order.Status) ? record.Status : order.Status;
-        if (effectiveStatus != order.Status)
+        void SyncField<T>(string fieldName, T localValue, T erpValue, Action<T> setter, Func<T, string?> format)
         {
-            AddFieldAudit(auditBuffer, run.Id, entityType, entityKey, "Status", order.Status.ToString(), effectiveStatus.ToString(), timestamp);
-            order.Status = effectiveStatus;
-            changed = true;
+            if (EqualityComparer<T>.Default.Equals(localValue, erpValue))
+            {
+                return;
+            }
+
+            var oldText = format(localValue);
+            var newText = format(erpValue);
+
+            if (order.LocallyModifiedUtc is null)
+            {
+                setter(erpValue);
+
+                erpApplied = true;
+                AddFieldAudit(auditBuffer, run.Id, entityType, entityKey, fieldName, oldText, newText, timestamp);
+            }
+            else if (ShouldErpWin(erpModifiedUtc, order.LocallyModifiedUtc))
+            {
+                setter(erpValue);
+
+                erpApplied = true;
+                AddFieldAudit(auditBuffer, run.Id, entityType, entityKey, fieldName, oldText, newText, timestamp, SyncAuditAction.ConflictResolved, ConflictMessage);
+            }
+            else
+            {
+                localKept = true;
+                AddFieldAudit(auditBuffer, run.Id, entityType, entityKey, fieldName, newText, oldText, timestamp, SyncAuditAction.ConflictResolved, ConflictMessage);
+            }
         }
 
-        if (effectiveStatus != record.Status)
-        {
-            AddFieldAudit(
-                auditBuffer,
-                run.Id,
-                entityType,
-                entityKey,
-                "Status",
-                record.Status.ToString(),
-                effectiveStatus.ToString(),
-                timestamp,
-                SyncAuditAction.ConflictResolved,
-                "The local status is further along than the ERP status; the local status was kept.");
-        }
+        SyncField("VendorCode", order.VendorCode, mapped.VendorCode, v => order.VendorCode = v, v => v);
+        SyncField("OrderDateUtc", order.OrderDateUtc, mapped.OrderDateUtc, v => order.OrderDateUtc = v, ToAuditValue);
+        SyncField("ExpectedDateUtc", order.ExpectedDateUtc, mapped.ExpectedDateUtc, v => order.ExpectedDateUtc = v, ToAuditValue);
+        SyncField("TotalAmount", order.TotalAmount, mapped.TotalAmount, v => order.TotalAmount = v, ToAuditValue);
+        SyncField("ErpRecordId", order.ErpRecordId, mapped.ErpRecordId, v => order.ErpRecordId = v, v => v);
 
-        if (!string.Equals(order.VendorCode, record.VendorCode, StringComparison.Ordinal))
+        if (mapped.Status != order.Status)
         {
-            AddFieldAudit(auditBuffer, run.Id, entityType, entityKey, "VendorCode", order.VendorCode, record.VendorCode, timestamp);
-            order.VendorCode = record.VendorCode;
-            changed = true;
-        }
+            var previousStatus = order.Status;
 
-        if (order.OrderDateUtc != record.OrderDateUtc)
-        {
-            AddFieldAudit(auditBuffer, run.Id, entityType, entityKey, "OrderDateUtc", ToAuditValue(order.OrderDateUtc), ToAuditValue(record.OrderDateUtc), timestamp);
-            order.OrderDateUtc = record.OrderDateUtc;
-            changed = true;
-        }
+            if (StatusRank(mapped.Status) >= StatusRank(order.Status))
+            {
+                SyncField("Status", order.Status, mapped.Status, v => order.Status = v, v => v.ToString());
+            }
+            else if (Options.ConflictResolution == ConflictResolutionStrategy.ErpWins
+                || (Options.ConflictResolution == ConflictResolutionStrategy.NewerWins
+                    && (order.LocallyModifiedUtc is null || erpModifiedUtc >= order.LocallyModifiedUtc.Value)))
+            {
+                order.Status = mapped.Status;
 
-        if (order.ExpectedDateUtc != record.ExpectedDateUtc)
-        {
-            AddFieldAudit(auditBuffer, run.Id, entityType, entityKey, "ExpectedDateUtc", ToAuditValue(order.ExpectedDateUtc), ToAuditValue(record.ExpectedDateUtc), timestamp);
-            order.ExpectedDateUtc = record.ExpectedDateUtc;
-            changed = true;
-        }
-
-        if (order.TotalAmount != record.TotalAmount)
-        {
-            AddFieldAudit(auditBuffer, run.Id, entityType, entityKey, "TotalAmount", ToAuditValue(order.TotalAmount), ToAuditValue(record.TotalAmount), timestamp);
-            order.TotalAmount = record.TotalAmount;
-            changed = true;
-        }
-
-        if (!string.Equals(order.ErpRecordId, record.ErpRecordId, StringComparison.Ordinal))
-        {
-            AddFieldAudit(auditBuffer, run.Id, entityType, entityKey, "ErpRecordId", order.ErpRecordId, record.ErpRecordId, timestamp);
-            order.ErpRecordId = record.ErpRecordId;
-            changed = true;
+                erpApplied = true;
+                AddFieldAudit(
+                    auditBuffer,
+                    run.Id,
+                    entityType,
+                    entityKey,
+                    "Status",
+                    previousStatus.ToString(),
+                    mapped.Status.ToString(),
+                    timestamp,
+                    SyncAuditAction.ConflictResolved,
+                    "The ERP status overrides the further-progressed local status per the configured strategy.");
+            }
+            else
+            {
+                localKept = true;
+                AddFieldAudit(
+                    auditBuffer,
+                    run.Id,
+                    entityType,
+                    entityKey,
+                    "Status",
+                    mapped.Status.ToString(),
+                    previousStatus.ToString(),
+                    timestamp,
+                    SyncAuditAction.ConflictResolved,
+                    "The local status is further along than the ERP status; the local status was kept.");
+            }
         }
 
         var existingBySku = order.Lines.ToDictionary(l => l.Sku, StringComparer.Ordinal);
 
-        foreach (var erpLine in record.Lines)
+        foreach (var erpLine in mapped.Lines)
         {
             if (existingBySku.Remove(erpLine.Sku, out var line))
             {
@@ -416,25 +536,26 @@ public class SyncService : ISyncService
                 {
                     AddFieldAudit(auditBuffer, run.Id, entityType, entityKey, $"Lines/{erpLine.Sku}/QuantityOrdered", ToAuditValue(line.QuantityOrdered), ToAuditValue(erpLine.QuantityOrdered), timestamp);
                     line.QuantityOrdered = erpLine.QuantityOrdered;
-                    changed = true;
+                    erpApplied = true;
                 }
 
                 if (line.UnitPrice != erpLine.UnitPrice)
                 {
                     AddFieldAudit(auditBuffer, run.Id, entityType, entityKey, $"Lines/{erpLine.Sku}/UnitPrice", ToAuditValue(line.UnitPrice), ToAuditValue(erpLine.UnitPrice), timestamp);
                     line.UnitPrice = erpLine.UnitPrice;
-                    changed = true;
+                    erpApplied = true;
                 }
 
                 var received = Math.Max(line.QuantityReceived, erpLine.QuantityReceived);
                 if (received != line.QuantityReceived)
                 {
                     line.QuantityReceived = received;
-                    changed = true;
+                    erpApplied = true;
                 }
 
                 if (received != erpLine.QuantityReceived)
                 {
+                    localKept = true;
                     AddFieldAudit(
                         auditBuffer,
                         run.Id,
@@ -457,7 +578,8 @@ public class SyncService : ISyncService
                     QuantityReceived = erpLine.QuantityReceived,
                     UnitPrice = erpLine.UnitPrice,
                 });
-                changed = true;
+
+                erpApplied = true;
                 AddFieldAudit(
                     auditBuffer,
                     run.Id,
@@ -475,7 +597,7 @@ public class SyncService : ISyncService
         foreach (var removed in existingBySku.Values)
         {
             order.Lines.Remove(removed);
-            changed = true;
+            erpApplied = true;
             AddFieldAudit(
                 auditBuffer,
                 run.Id,
@@ -489,9 +611,15 @@ public class SyncService : ISyncService
                 message: $"Removed line {removed.Sku}.");
         }
 
-        if (changed)
+        if (erpApplied)
         {
-            order.LastSyncedUtc = record.ModifiedUtc;
+            order.LastSyncedUtc = mapped.LastSyncedUtc;
+            order.LocallyModifiedUtc = null;
+            run.RecordsUpdated++;
+        }
+        else if (localKept)
+        {
+            order.LastSyncedUtc = mapped.LastSyncedUtc;
             run.RecordsUpdated++;
         }
         else
@@ -509,40 +637,13 @@ public class SyncService : ISyncService
         }
     }
 
-    private static InventoryItem ToEntity(ErpInventoryRecord record)
+    private bool ShouldErpWin(DateTime erpModifiedUtc, DateTime? locallyModifiedUtc)
     {
-        return new InventoryItem
+        return Options.ConflictResolution switch
         {
-            Sku = record.Sku,
-            Name = record.Name,
-            Description = record.Description,
-            QuantityOnHand = record.QuantityOnHand,
-            UnitCost = record.UnitCost,
-            WarehouseCode = record.WarehouseCode,
-            ErpRecordId = record.ErpRecordId,
-            LastSyncedUtc = record.ModifiedUtc,
-        };
-    }
-
-    private static PurchaseOrder ToEntity(ErpPurchaseOrderRecord record)
-    {
-        return new PurchaseOrder
-        {
-            PoNumber = record.PoNumber,
-            VendorCode = record.VendorCode,
-            Status = record.Status,
-            OrderDateUtc = record.OrderDateUtc,
-            ExpectedDateUtc = record.ExpectedDateUtc,
-            TotalAmount = record.TotalAmount,
-            ErpRecordId = record.ErpRecordId,
-            LastSyncedUtc = record.ModifiedUtc,
-            Lines = record.Lines.Select(l => new PurchaseOrderLine
-            {
-                Sku = l.Sku,
-                QuantityOrdered = l.QuantityOrdered,
-                QuantityReceived = l.QuantityReceived,
-                UnitPrice = l.UnitPrice,
-            }).ToList(),
+            ConflictResolutionStrategy.ErpWins => true,
+            ConflictResolutionStrategy.LocalWins => false,
+            _ => locallyModifiedUtc is null || erpModifiedUtc >= locallyModifiedUtc.Value,
         };
     }
 
@@ -597,6 +698,11 @@ public class SyncService : ISyncService
         string? message = null)
     {
         auditBuffer.Add(CreateAudit(syncRunId, entityType, entityKey, action, fieldName, oldValue, newValue, message, timestamp));
+    }
+
+    private static string FormatFieldErrors(IReadOnlyList<FieldError> errors)
+    {
+        return string.Join("; ", errors.Select(e => $"{e.FieldName}: {e.Message}"));
     }
 
     private static string ToAuditValue(decimal value)

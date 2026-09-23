@@ -15,6 +15,19 @@ services:
       retries: 12
       start_period: 30s
 
+  mock-erp:
+    build:
+      context: .
+      dockerfile: src/MockErp/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Erp__InventoryCount: "12000"
+      Erp__PurchaseOrderCount: "2500"
+      Faults__DefaultFailRate: "${MOCK_ERP_FAIL_RATE:-0}"
+      Faults__DefaultMalformedRate: "${MOCK_ERP_MALFORMED_RATE:-0}"
+    ports:
+      - "18083:8080"
+
   api:
     build:
       context: .
@@ -22,11 +35,15 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=InventorySync;User Id=sa;Password=${MSSQL_SA_PASSWORD:-InventorySync!Passw0rd};TrustServerCertificate=True"
+      Erp__BaseUrl: "http://mock-erp:8080"
+      Sync__ConflictResolution: "NewerWins"
     ports:
-      - "8080:8080"
+      - "18084:8080"
     depends_on:
       sqlserver:
         condition: service_healthy
+      mock-erp:
+        condition: service_started
 
 volumes:
   mssql-data:

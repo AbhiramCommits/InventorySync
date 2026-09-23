@@ -2,7 +2,7 @@ using InventorySync.Core.Enums;
 
 namespace InventorySync.Core.Dtos;
 
-public sealed record ErpInventoryRecord(
+public sealed record SeedInventoryRecord(
     string ErpRecordId,
     string Sku,
     string Name,
@@ -12,7 +12,7 @@ public sealed record ErpInventoryRecord(
     string WarehouseCode,
     DateTime ModifiedUtc);
 
-public sealed record ErpPurchaseOrderRecord(
+public sealed record SeedPurchaseOrderRecord(
     string ErpRecordId,
     string PoNumber,
     string VendorCode,
@@ -21,9 +21,9 @@ public sealed record ErpPurchaseOrderRecord(
     DateTime ExpectedDateUtc,
     decimal TotalAmount,
     DateTime ModifiedUtc,
-    IReadOnlyList<ErpPurchaseOrderLineRecord> Lines);
+    IReadOnlyList<SeedPurchaseOrderLineRecord> Lines);
 
-public sealed record ErpPurchaseOrderLineRecord(
+public sealed record SeedPurchaseOrderLineRecord(
     string Sku,
     int QuantityOrdered,
     int QuantityReceived,

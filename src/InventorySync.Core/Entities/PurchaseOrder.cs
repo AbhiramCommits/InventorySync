@@ -22,5 +22,7 @@ public class PurchaseOrder
 
     public DateTime? LastSyncedUtc { get; set; }
 
+    public DateTime? LocallyModifiedUtc { get; set; }
+
     public ICollection<PurchaseOrderLine> Lines { get; set; } = new List<PurchaseOrderLine>();
 }

@@ -15,13 +15,9 @@ public class PurchaseOrderService : IPurchaseOrderService
         _repository = repository;
     }
 
-    public async Task<PagedResult<PurchaseOrderDto>> GetPagedAsync(
-        PurchaseOrderStatus? status,
-        int page,
-        int pageSize,
-        CancellationToken ct = default)
+    public async Task<PagedResult<PurchaseOrderDto>> GetPagedAsync(PurchaseOrderQuery query, CancellationToken ct = default)
     {
-        var result = await _repository.GetPagedAsync(status, page, pageSize, ct);
+        var result = await _repository.GetPagedAsync(query, ct);
 
         return new PagedResult<PurchaseOrderDto>
         {
@@ -79,6 +75,7 @@ public class PurchaseOrderService : IPurchaseOrderService
             Status = PurchaseOrderStatus.Draft,
             OrderDateUtc = request.OrderDateUtc,
             ExpectedDateUtc = request.ExpectedDateUtc,
+            LocallyModifiedUtc = DateTime.UtcNow,
             Lines = request.Lines.Select(l => new PurchaseOrderLine
             {
                 Sku = l.Sku.Trim(),
@@ -107,6 +104,7 @@ public class PurchaseOrderService : IPurchaseOrderService
         }
 
         order.Status = PurchaseOrderStatus.Submitted;
+        order.LocallyModifiedUtc = DateTime.UtcNow;
         await _repository.SaveChangesAsync(ct);
 
         return DtoMapper.ToDto(order);
@@ -140,6 +138,7 @@ public class PurchaseOrderService : IPurchaseOrderService
         order.Status = order.Lines.All(l => l.QuantityReceived >= l.QuantityOrdered)
             ? PurchaseOrderStatus.Received
             : PurchaseOrderStatus.PartiallyReceived;
+        order.LocallyModifiedUtc = DateTime.UtcNow;
 
         await _repository.SaveChangesAsync(ct);
 
@@ -157,6 +156,7 @@ public class PurchaseOrderService : IPurchaseOrderService
         }
 
         order.Status = PurchaseOrderStatus.Cancelled;
+        order.LocallyModifiedUtc = DateTime.UtcNow;
         await _repository.SaveChangesAsync(ct);
 
         return DtoMapper.ToDto(order);

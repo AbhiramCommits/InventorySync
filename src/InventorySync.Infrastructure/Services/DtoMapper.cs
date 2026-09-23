@@ -17,6 +17,7 @@ internal static class DtoMapper
             UnitCost = item.UnitCost,
             WarehouseCode = item.WarehouseCode,
             LastSyncedUtc = item.LastSyncedUtc,
+            LocallyModifiedUtc = item.LocallyModifiedUtc,
             ErpRecordId = item.ErpRecordId,
             RowVersion = item.RowVersion is null ? null : Convert.ToBase64String(item.RowVersion),
         };
@@ -35,6 +36,7 @@ internal static class DtoMapper
             TotalAmount = order.TotalAmount,
             ErpRecordId = order.ErpRecordId,
             LastSyncedUtc = order.LastSyncedUtc,
+            LocallyModifiedUtc = order.LocallyModifiedUtc,
             Lines = order.Lines.Select(ToDto).ToList(),
         };
     }
@@ -56,6 +58,7 @@ internal static class DtoMapper
         return new SyncRunDto
         {
             Id = run.Id,
+            ParentSyncRunId = run.ParentSyncRunId,
             EntityType = run.EntityType,
             StartedUtc = run.StartedUtc,
             CompletedUtc = run.CompletedUtc,
@@ -82,22 +85,6 @@ internal static class DtoMapper
             NewValue = entry.NewValue,
             Message = entry.Message,
             TimestampUtc = entry.TimestampUtc,
-        };
-    }
-
-    public static SyncResultDto ToSyncResult(SyncRun run)
-    {
-        return new SyncResultDto
-        {
-            SyncRunId = run.Id,
-            EntityType = run.EntityType,
-            Status = run.Status,
-            StartedUtc = run.StartedUtc,
-            CompletedUtc = run.CompletedUtc,
-            RecordsRead = run.RecordsRead,
-            RecordsInserted = run.RecordsInserted,
-            RecordsUpdated = run.RecordsUpdated,
-            RecordsFailed = run.RecordsFailed,
         };
     }
 }

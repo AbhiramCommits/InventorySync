@@ -4,7 +4,7 @@ namespace InventorySync.Core.Interfaces;
 
 public interface IInventoryService
 {
-    Task<PagedResult<InventoryItemDto>> GetPagedAsync(string? warehouseCode, int page, int pageSize, CancellationToken ct = default);
+    Task<PagedResult<InventoryItemDto>> GetPagedAsync(InventoryItemQuery query, CancellationToken ct = default);
 
     Task<InventoryItemDto> GetByIdAsync(int id, CancellationToken ct = default);
 

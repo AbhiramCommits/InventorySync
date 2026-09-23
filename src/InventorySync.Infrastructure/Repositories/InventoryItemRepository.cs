@@ -8,6 +8,17 @@ namespace InventorySync.Infrastructure.Repositories;
 
 public class InventoryItemRepository : IInventoryItemRepository
 {
+    private static readonly IReadOnlyDictionary<string, string> SortColumns =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["sku"] = nameof(InventoryItem.Sku),
+            ["name"] = nameof(InventoryItem.Name),
+            ["quantityOnHand"] = nameof(InventoryItem.QuantityOnHand),
+            ["unitCost"] = nameof(InventoryItem.UnitCost),
+            ["warehouseCode"] = nameof(InventoryItem.WarehouseCode),
+            ["lastSyncedUtc"] = nameof(InventoryItem.LastSyncedUtc),
+        };
+
     private readonly SyncDbContext _context;
 
     public InventoryItemRepository(SyncDbContext context)
@@ -15,31 +26,41 @@ public class InventoryItemRepository : IInventoryItemRepository
         _context = context;
     }
 
-    public async Task<PagedResult<InventoryItem>> GetPagedAsync(
-        string? warehouseCode,
-        int page,
-        int pageSize,
-        CancellationToken ct = default)
+    public async Task<PagedResult<InventoryItem>> GetPagedAsync(InventoryItemQuery query, CancellationToken ct = default)
     {
-        var query = _context.InventoryItems.AsNoTracking();
+        var filtered = _context.InventoryItems.AsNoTracking();
 
-        if (!string.IsNullOrWhiteSpace(warehouseCode))
+        if (!string.IsNullOrWhiteSpace(query.Search))
         {
-            query = query.Where(x => x.WarehouseCode == warehouseCode);
+            filtered = filtered.Where(x => x.Sku.Contains(query.Search));
         }
 
-        var totalCount = await query.CountAsync(ct);
-        var items = await query
-            .OrderBy(x => x.Sku)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+        if (!string.IsNullOrWhiteSpace(query.WarehouseCode))
+        {
+            filtered = filtered.Where(x => x.WarehouseCode == query.WarehouseCode);
+        }
+
+        if (query.LastSyncedFrom.HasValue)
+        {
+            filtered = filtered.Where(x => x.LastSyncedUtc >= query.LastSyncedFrom.Value);
+        }
+
+        if (query.LastSyncedTo.HasValue)
+        {
+            filtered = filtered.Where(x => x.LastSyncedUtc <= query.LastSyncedTo.Value);
+        }
+
+        var totalCount = await filtered.CountAsync(ct);
+        var items = await ApplySorting(filtered, query.Sort)
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
             .ToListAsync(ct);
 
         return new PagedResult<InventoryItem>
         {
             Items = items,
-            Page = page,
-            PageSize = pageSize,
+            Page = query.Page,
+            PageSize = query.PageSize,
             TotalCount = totalCount,
         };
     }
@@ -88,5 +109,20 @@ public class InventoryItemRepository : IInventoryItemRepository
     public Task<int> SaveChangesAsync(CancellationToken ct = default)
     {
         return _context.SaveChangesAsync(ct);
+    }
+
+    private static IQueryable<InventoryItem> ApplySorting(IQueryable<InventoryItem> query, string sort)
+    {
+        var descending = sort.StartsWith('-');
+        var column = descending ? sort[1..] : sort;
+
+        if (!SortColumns.TryGetValue(column, out var property))
+        {
+            property = nameof(InventoryItem.Sku);
+        }
+
+        return descending
+            ? query.OrderByDescending(x => EF.Property<object>(x, property))
+            : query.OrderBy(x => EF.Property<object>(x, property));
     }
 }

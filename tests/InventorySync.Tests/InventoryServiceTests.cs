@@ -111,10 +111,38 @@ public class InventoryServiceTests
         await service.CreateAsync(ValidRequest(sku: "SKU-2", warehouse: "WH01"));
         await service.CreateAsync(ValidRequest(sku: "SKU-3", warehouse: "WH02"));
 
-        var result = await service.GetPagedAsync("WH01", 1, 10);
+        var result = await service.GetPagedAsync(new InventoryItemQuery
+        {
+            WarehouseCode = "WH01",
+            Page = 1,
+            PageSize = 10,
+        });
 
         Assert.Equal(2, result.TotalCount);
         Assert.All(result.Items, i => Assert.Equal("WH01", i.WarehouseCode));
+    }
+
+    [Fact]
+    public async Task GetPaged_SearchesAndSorts()
+    {
+        await using var db = InMemoryDb.Create();
+        var service = CreateService(db);
+
+        await service.CreateAsync(ValidRequest(sku: "SKU-ALPHA"));
+        await service.CreateAsync(ValidRequest(sku: "SKU-BETA"));
+        await service.CreateAsync(ValidRequest(sku: "XYZ-1"));
+
+        var result = await service.GetPagedAsync(new InventoryItemQuery
+        {
+            Search = "SKU",
+            Sort = "-sku",
+            Page = 1,
+            PageSize = 10,
+        });
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal("SKU-BETA", result.Items[0].Sku);
+        Assert.Equal("SKU-ALPHA", result.Items[1].Sku);
     }
 
     [Fact]

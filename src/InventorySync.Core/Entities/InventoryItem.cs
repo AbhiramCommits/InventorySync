@@ -18,6 +18,8 @@ public class InventoryItem
 
     public DateTime? LastSyncedUtc { get; set; }
 
+    public DateTime? LocallyModifiedUtc { get; set; }
+
     public string? ErpRecordId { get; set; }
 
     public byte[]? RowVersion { get; set; }

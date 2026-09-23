@@ -6,6 +6,10 @@ public class SyncRun
 {
     public int Id { get; set; }
 
+    public int? ParentSyncRunId { get; set; }
+
+    public SyncRun? ParentSyncRun { get; set; }
+
     public SyncEntityType EntityType { get; set; }
 
     public DateTime StartedUtc { get; set; }

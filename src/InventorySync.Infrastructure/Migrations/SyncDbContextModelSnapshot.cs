@@ -41,6 +41,9 @@ namespace InventorySync.Infrastructure.Migrations
                     b.Property<DateTime?>("LastSyncedUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<DateTime?>("LocallyModifiedUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -94,6 +97,9 @@ namespace InventorySync.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<DateTime?>("LastSyncedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("LocallyModifiedUtc")
                         .HasColumnType("datetime2");
 
                     b.Property<DateTime>("OrderDateUtc")
@@ -219,6 +225,9 @@ namespace InventorySync.Infrastructure.Migrations
                     b.Property<int>("EntityType")
                         .HasColumnType("int");
 
+                    b.Property<int?>("ParentSyncRunId")
+                        .HasColumnType("int");
+
                     b.Property<int>("RecordsFailed")
                         .HasColumnType("int");
 
@@ -244,6 +253,8 @@ namespace InventorySync.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ParentSyncRunId");
+
                     b.HasIndex("EntityType", "StartedUtc");
 
                     b.ToTable("SyncRuns", (string)null);
@@ -265,6 +276,16 @@ namespace InventorySync.Infrastructure.Migrations
                         .HasForeignKey("SyncRunId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("InventorySync.Core.Entities.SyncRun", b =>
+                {
+                    b.HasOne("InventorySync.Core.Entities.SyncRun", "ParentSyncRun")
+                        .WithMany()
+                        .HasForeignKey("ParentSyncRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("ParentSyncRun");
                 });
 
             modelBuilder.Entity("InventorySync.Core.Entities.PurchaseOrder", b =>

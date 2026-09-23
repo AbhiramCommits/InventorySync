@@ -9,7 +9,7 @@ public static class ErpDataGenerator
 
     private static readonly DateTime EpochUtc = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    public static IEnumerable<ErpInventoryRecord> GenerateInventory(int count, int seed)
+    public static IEnumerable<SeedInventoryRecord> GenerateInventory(int count, int seed)
     {
         var random = new Random(seed);
 
@@ -22,7 +22,7 @@ public static class ErpDataGenerator
             var unitCost = Math.Round((decimal)(random.NextDouble() * 499.99 + 0.01), 4);
             var modifiedUtc = EpochUtc.AddDays(random.Next(0, 365)).AddMinutes(random.Next(0, 1440));
 
-            yield return new ErpInventoryRecord(
+            yield return new SeedInventoryRecord(
                 $"ERP-INV-{i:D6}",
                 sku,
                 $"Item {sku}",
@@ -34,7 +34,7 @@ public static class ErpDataGenerator
         }
     }
 
-    public static IEnumerable<ErpPurchaseOrderRecord> GeneratePurchaseOrders(int count, int seed, int itemCount)
+    public static IEnumerable<SeedPurchaseOrderRecord> GeneratePurchaseOrders(int count, int seed, int itemCount)
     {
         var random = new Random(seed ^ 0x5F3759DF);
 
@@ -54,7 +54,7 @@ public static class ErpDataGenerator
             };
 
             var lineCount = random.Next(1, 11);
-            var lines = new List<ErpPurchaseOrderLineRecord>(lineCount);
+            var lines = new List<SeedPurchaseOrderLineRecord>(lineCount);
             var usedSkus = new HashSet<string>(StringComparer.Ordinal);
             for (var j = 0; j < lineCount; j++)
             {
@@ -74,7 +74,7 @@ public static class ErpDataGenerator
                 };
                 var unitPrice = Math.Round((decimal)(random.NextDouble() * 99.99 + 0.01), 4);
 
-                lines.Add(new ErpPurchaseOrderLineRecord(sku, quantityOrdered, quantityReceived, unitPrice));
+                lines.Add(new SeedPurchaseOrderLineRecord(sku, quantityOrdered, quantityReceived, unitPrice));
             }
 
             if (status == PurchaseOrderStatus.PartiallyReceived)
@@ -97,7 +97,7 @@ public static class ErpDataGenerator
             var expectedDateUtc = orderDateUtc.AddDays(random.Next(7, 31));
             var modifiedUtc = EpochUtc.AddDays(random.Next(0, 365)).AddMinutes(random.Next(0, 1440));
 
-            yield return new ErpPurchaseOrderRecord(
+            yield return new SeedPurchaseOrderRecord(
                 $"ERP-PO-{i:D6}",
                 poNumber,
                 vendorCode,

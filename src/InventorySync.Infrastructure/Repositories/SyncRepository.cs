@@ -23,6 +23,7 @@ public class SyncRepository : ISyncRepository
 
     public async Task<PagedResult<SyncRun>> GetRunsAsync(
         SyncEntityType? entityType,
+        SyncRunStatus? status,
         int page,
         int pageSize,
         CancellationToken ct = default)
@@ -32,6 +33,11 @@ public class SyncRepository : ISyncRepository
         if (entityType.HasValue)
         {
             query = query.Where(x => x.EntityType == entityType.Value);
+        }
+
+        if (status.HasValue)
+        {
+            query = query.Where(x => x.Status == status.Value);
         }
 
         var totalCount = await query.CountAsync(ct);
@@ -57,16 +63,48 @@ public class SyncRepository : ISyncRepository
 
     public async Task<IReadOnlyList<SyncAuditEntry>> GetAuditEntriesAsync(
         int syncRunId,
+        SyncAuditAction? action,
         int skip,
         int take,
         CancellationToken ct = default)
     {
-        return await _context.SyncAuditEntries
+        var query = _context.SyncAuditEntries
             .AsNoTracking()
-            .Where(x => x.SyncRunId == syncRunId)
+            .Where(x => x.SyncRunId == syncRunId);
+
+        if (action.HasValue)
+        {
+            query = query.Where(x => x.Action == action.Value);
+        }
+
+        return await query
             .OrderBy(x => x.Id)
             .Skip(skip)
             .Take(take)
+            .ToListAsync(ct);
+    }
+
+    public Task<int> CountAuditEntriesAsync(int syncRunId, SyncAuditAction? action, CancellationToken ct = default)
+    {
+        var query = _context.SyncAuditEntries.AsNoTracking().Where(x => x.SyncRunId == syncRunId);
+
+        if (action.HasValue)
+        {
+            query = query.Where(x => x.Action == action.Value);
+        }
+
+        return query.CountAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<SyncAuditEntry>> GetAuditEntriesByActionAsync(
+        int syncRunId,
+        SyncAuditAction action,
+        CancellationToken ct = default)
+    {
+        return await _context.SyncAuditEntries
+            .AsNoTracking()
+            .Where(x => x.SyncRunId == syncRunId && x.Action == action)
+            .OrderBy(x => x.Id)
             .ToListAsync(ct);
     }
 

@@ -15,13 +15,9 @@ public class InventoryService : IInventoryService
         _repository = repository;
     }
 
-    public async Task<PagedResult<InventoryItemDto>> GetPagedAsync(
-        string? warehouseCode,
-        int page,
-        int pageSize,
-        CancellationToken ct = default)
+    public async Task<PagedResult<InventoryItemDto>> GetPagedAsync(InventoryItemQuery query, CancellationToken ct = default)
     {
-        var result = await _repository.GetPagedAsync(warehouseCode, page, pageSize, ct);
+        var result = await _repository.GetPagedAsync(query, ct);
 
         return new PagedResult<InventoryItemDto>
         {
@@ -73,6 +69,7 @@ public class InventoryService : IInventoryService
             QuantityOnHand = request.QuantityOnHand,
             UnitCost = request.UnitCost,
             WarehouseCode = request.WarehouseCode,
+            LocallyModifiedUtc = DateTime.UtcNow,
         };
 
         await _repository.AddAsync(item, ct);
@@ -103,6 +100,7 @@ public class InventoryService : IInventoryService
         item.QuantityOnHand = request.QuantityOnHand;
         item.UnitCost = request.UnitCost;
         item.WarehouseCode = request.WarehouseCode;
+        item.LocallyModifiedUtc = DateTime.UtcNow;
 
         try
         {

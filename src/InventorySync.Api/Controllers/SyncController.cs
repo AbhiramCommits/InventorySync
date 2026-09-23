@@ -5,6 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace InventorySync.Api.Controllers;
 
+/// <summary>
+/// Triggers and inspects ERP synchronisation runs.
+/// </summary>
 [ApiController]
 [Route("api/sync")]
 public class SyncController : ControllerBase
@@ -16,45 +19,67 @@ public class SyncController : ControllerBase
         _service = service;
     }
 
+    /// <summary>
+    /// Triggers a full inventory synchronisation from the ERP system and returns the resulting sync run.
+    /// </summary>
     [HttpPost("inventory")]
-    public async Task<ActionResult<SyncResultDto>> SyncInventory(
-        [FromQuery] string? triggeredBy,
-        CancellationToken ct = default)
+    public async Task<ActionResult<SyncRunDto>> SyncInventory([FromQuery] string? triggeredBy, CancellationToken ct = default)
     {
-        var result = await _service.SyncInventoryAsync(triggeredBy ?? "api", ct);
-        return result.Status == SyncRunStatus.Failed ? StatusCode(StatusCodes.Status500InternalServerError, result) : Ok(result);
+        return Ok(await _service.SyncInventoryAsync(triggeredBy ?? "api", ct));
     }
 
-    [HttpPost("purchaseorders")]
-    public async Task<ActionResult<SyncResultDto>> SyncPurchaseOrders(
-        [FromQuery] string? triggeredBy,
-        CancellationToken ct = default)
+    /// <summary>
+    /// Triggers a full purchase order synchronisation from the ERP system and returns the resulting sync run.
+    /// </summary>
+    [HttpPost("purchase-orders")]
+    public async Task<ActionResult<SyncRunDto>> SyncPurchaseOrders([FromQuery] string? triggeredBy, CancellationToken ct = default)
     {
-        var result = await _service.SyncPurchaseOrdersAsync(triggeredBy ?? "api", ct);
-        return result.Status == SyncRunStatus.Failed ? StatusCode(StatusCodes.Status500InternalServerError, result) : Ok(result);
+        return Ok(await _service.SyncPurchaseOrdersAsync(triggeredBy ?? "api", ct));
     }
 
+    /// <summary>
+    /// Retries the records that failed in the given run and creates a new child sync run.
+    /// </summary>
+    [HttpPost("runs/{id:int}/retry")]
+    public async Task<ActionResult<SyncRunDto>> RetryFailedRecords(int id, CancellationToken ct = default)
+    {
+        return Ok(await _service.RetryFailedRecordsAsync(id, ct));
+    }
+
+    /// <summary>
+    /// Returns a paged list of sync runs, optionally filtered by entity type and status.
+    /// </summary>
     [HttpGet("runs")]
     public async Task<ActionResult<PagedResult<SyncRunDto>>> GetRuns(
         [FromQuery] SyncEntityType? entityType,
+        [FromQuery] SyncRunStatus? status,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken ct = default)
     {
-        page = Math.Max(1, page);
-        pageSize = Math.Clamp(pageSize, 1, 200);
-        return Ok(await _service.GetRunsAsync(entityType, page, pageSize, ct));
+        return Ok(await _service.GetRunsAsync(entityType, status, Math.Max(1, page), Math.Clamp(pageSize, 1, 200), ct));
     }
 
-    [HttpGet("runs/{id:int}/audits")]
-    public async Task<ActionResult<IReadOnlyList<SyncAuditEntryDto>>> GetAuditEntries(
+    /// <summary>
+    /// Returns a single sync run.
+    /// </summary>
+    [HttpGet("runs/{id:int}")]
+    public async Task<ActionResult<SyncRunDto>> GetRun(int id, CancellationToken ct = default)
+    {
+        return Ok(await _service.GetRunByIdAsync(id, ct));
+    }
+
+    /// <summary>
+    /// Returns the audit entries for a sync run, optionally filtered by action.
+    /// </summary>
+    [HttpGet("runs/{id:int}/audit")]
+    public async Task<ActionResult<PagedResult<SyncAuditEntryDto>>> GetAuditEntries(
         int id,
+        [FromQuery] SyncAuditAction? action,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 100,
         CancellationToken ct = default)
     {
-        page = Math.Max(1, page);
-        pageSize = Math.Clamp(pageSize, 1, 500);
-        return Ok(await _service.GetAuditEntriesAsync(id, page, pageSize, ct));
+        return Ok(await _service.GetAuditEntriesAsync(id, action, Math.Max(1, page), Math.Clamp(pageSize, 1, 500), ct));
     }
 }

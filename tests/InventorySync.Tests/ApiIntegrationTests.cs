@@ -2,11 +2,18 @@ using System.Net;
 using System.Net.Http.Json;
 using InventorySync.Core.Dtos;
 using InventorySync.Core.Enums;
+using InventorySync.Core.Options;
 using InventorySync.Infrastructure.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Http;
+using InventorySync.Core.Interfaces;
+using InventorySync.Infrastructure.Erp;
 
 namespace InventorySync.Tests;
 
@@ -15,7 +22,7 @@ public class ApiIntegrationTests
     [Fact]
     public async Task InventoryEndpoints_WorkEndToEnd()
     {
-        using var factory = new TestApiFactory();
+        using var factory = CreateApiFactory();
         using var client = factory.CreateClient();
 
         var createResponse = await client.PostAsJsonAsync("/api/inventory", new
@@ -34,49 +41,87 @@ public class ApiIntegrationTests
         var getResponse = await client.GetAsync($"/api/inventory/{created.Id}");
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
 
-        var getBySkuResponse = await client.GetAsync("/api/inventory/sku/SKU-API-1");
-        Assert.Equal(HttpStatusCode.OK, getBySkuResponse.StatusCode);
-
-        var listResponse = await client.GetAsync("/api/inventory?warehouseCode=WH01");
-        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
-        var paged = await listResponse.Content.ReadFromJsonAsync<PagedResult<InventoryItemDto>>();
+        var searchResponse = await client.GetAsync("/api/inventory?search=API-1&sort=-sku");
+        Assert.Equal(HttpStatusCode.OK, searchResponse.StatusCode);
+        var paged = await searchResponse.Content.ReadFromJsonAsync<PagedResult<InventoryItemDto>>();
         Assert.NotNull(paged);
         Assert.Equal(1, paged.TotalCount);
+
+        var invalidResponse = await client.PostAsJsonAsync("/api/inventory", new
+        {
+            sku = "",
+            name = "",
+            quantityOnHand = -1,
+            unitCost = 1m,
+            warehouseCode = "",
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, invalidResponse.StatusCode);
+        var problem = await invalidResponse.Content.ReadFromJsonAsync<ValidationProblemDetailsPayload>();
+        Assert.NotNull(problem);
+        Assert.True(problem.Errors.Count > 0);
 
         var missingResponse = await client.GetAsync("/api/inventory/999999");
         Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
     }
 
     [Fact]
-    public async Task SyncEndpoints_RunAndReport()
+    public async Task SyncEndpoints_RunAgainstMockErp_AndReportAudits()
     {
-        using var factory = new TestApiFactory();
+        using var factory = CreateApiFactory();
         using var client = factory.CreateClient();
 
         var syncResponse = await client.PostAsync("/api/sync/inventory?triggeredBy=integration-test", null);
         Assert.Equal(HttpStatusCode.OK, syncResponse.StatusCode);
-        var result = await syncResponse.Content.ReadFromJsonAsync<SyncResultDto>();
-        Assert.NotNull(result);
-        Assert.Equal(SyncRunStatus.Succeeded, result.Status);
-        Assert.True(result.RecordsInserted > 0);
+        var run = await syncResponse.Content.ReadFromJsonAsync<SyncRunDto>();
+        Assert.NotNull(run);
+        Assert.Equal(SyncRunStatus.Succeeded, run.Status);
+        Assert.Equal(300, run.RecordsRead);
+        Assert.Equal(300, run.RecordsInserted);
+        Assert.Equal(0, run.RecordsFailed);
 
-        var runsResponse = await client.GetAsync("/api/sync/runs");
+        var runsResponse = await client.GetAsync("/api/sync/runs?status=Succeeded");
         Assert.Equal(HttpStatusCode.OK, runsResponse.StatusCode);
         var runs = await runsResponse.Content.ReadFromJsonAsync<PagedResult<SyncRunDto>>();
         Assert.NotNull(runs);
-        Assert.True(runs.TotalCount >= 1);
+        Assert.Equal(1, runs.TotalCount);
 
-        var auditsResponse = await client.GetAsync($"/api/sync/runs/{result.SyncRunId}/audits?pageSize=10");
+        var runByIdResponse = await client.GetAsync($"/api/sync/runs/{run.Id}");
+        Assert.Equal(HttpStatusCode.OK, runByIdResponse.StatusCode);
+
+        var auditsResponse = await client.GetAsync($"/api/sync/runs/{run.Id}/audit?action=Insert&pageSize=10");
         Assert.Equal(HttpStatusCode.OK, auditsResponse.StatusCode);
-        var audits = await auditsResponse.Content.ReadFromJsonAsync<List<SyncAuditEntryDto>>();
+        var audits = await auditsResponse.Content.ReadFromJsonAsync<PagedResult<SyncAuditEntryDto>>();
         Assert.NotNull(audits);
-        Assert.Equal(10, audits.Count);
+        Assert.Equal(300, audits.TotalCount);
+        Assert.Equal(10, audits.Items.Count);
+    }
+
+    [Fact]
+    public async Task PurchaseOrderSync_And_Retry_Flow_Work()
+    {
+        using var factory = CreateApiFactory();
+        using var client = factory.CreateClient();
+
+        var syncResponse = await client.PostAsync("/api/sync/purchase-orders?triggeredBy=integration-test", null);
+        Assert.Equal(HttpStatusCode.OK, syncResponse.StatusCode);
+        var run = await syncResponse.Content.ReadFromJsonAsync<SyncRunDto>();
+        Assert.NotNull(run);
+        Assert.Equal(SyncRunStatus.Succeeded, run.Status);
+        Assert.Equal(80, run.RecordsInserted);
+
+        var retryResponse = await client.PostAsync($"/api/sync/runs/{run.Id}/retry", null);
+        Assert.Equal(HttpStatusCode.OK, retryResponse.StatusCode);
+        var child = await retryResponse.Content.ReadFromJsonAsync<SyncRunDto>();
+        Assert.NotNull(child);
+        Assert.Equal(run.Id, child.ParentSyncRunId);
+        Assert.Equal(0, child.RecordsRead);
+        Assert.Equal(SyncRunStatus.Succeeded, child.Status);
     }
 
     [Fact]
     public async Task PurchaseOrderLifecycle_WorksThroughApi()
     {
-        using var factory = new TestApiFactory();
+        using var factory = CreateApiFactory();
         using var client = factory.CreateClient();
 
         var request = new
@@ -106,6 +151,7 @@ public class ApiIntegrationTests
         var received = await receiveResponse.Content.ReadFromJsonAsync<PurchaseOrderDto>();
         Assert.NotNull(received);
         Assert.Equal(PurchaseOrderStatus.Received, received.Status);
+        Assert.NotNull(received.LocallyModifiedUtc);
 
         var overReceiveResponse = await client.PostAsJsonAsync(
             $"/api/purchaseorders/{created.Id}/lines/{created.Lines[0].Id}/receive",
@@ -113,9 +159,53 @@ public class ApiIntegrationTests
         Assert.Equal(HttpStatusCode.BadRequest, overReceiveResponse.StatusCode);
     }
 
+    [Fact]
+    public async Task HealthEndpoint_ReportsDatabaseAndErp()
+    {
+        using var factory = CreateApiFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/health");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("database", body);
+        Assert.Contains("erp", body);
+        Assert.Contains("Healthy", body);
+    }
+
+    private static TestApiFactory CreateApiFactory()
+    {
+        var mockErpFactory = new MockErpTestFactory();
+        var apiFactory = new TestApiFactory(mockErpFactory);
+        return apiFactory;
+    }
+
+    private sealed class MockErpTestFactory : WebApplicationFactory<MockErp.Program>
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Erp:InventoryCount"] = "300",
+                    ["Erp:PurchaseOrderCount"] = "80",
+                    ["Erp:Seed"] = "20240101",
+                });
+            });
+        }
+    }
+
     private sealed class TestApiFactory : WebApplicationFactory<Program>
     {
         private readonly string _databaseName = $"api-tests-{Guid.NewGuid():N}";
+        private readonly MockErpTestFactory _mockErp;
+
+        public TestApiFactory(MockErpTestFactory mockErp)
+        {
+            _mockErp = mockErp;
+        }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -134,7 +224,37 @@ public class ApiIntegrationTests
                 }
 
                 services.AddDbContext<SyncDbContext>(o => o.UseInMemoryDatabase(_databaseName));
+
+                var erpClientName = typeof(IErpClient).FullName!;
+                var staleClientConfigs = services
+                    .Where(d => d.ServiceType == typeof(IConfigureOptions<HttpClientFactoryOptions>)
+                        && d.ImplementationInstance is ConfigureNamedOptions<HttpClientFactoryOptions> named
+                        && named.Name == erpClientName)
+                    .ToList();
+
+                foreach (var descriptor in staleClientConfigs)
+                {
+                    services.Remove(descriptor);
+                }
+
+                services.RemoveAll<IErpClient>();
+                services.RemoveAll<ErpHttpClient>();
+
+                services.AddHttpClient<IErpClient, ErpHttpClient>(client => client.BaseAddress = new Uri("http://mock-erp.test/"))
+                    .AddPolicyHandler(ErpPolicies.RetryPolicy())
+                    .AddPolicyHandler(ErpPolicies.CircuitBreakerPolicy())
+                    .ConfigurePrimaryHttpMessageHandler(() => _mockErp.Server.CreateHandler());
+
+                services.AddHttpClient("erp-health")
+                    .ConfigurePrimaryHttpMessageHandler(() => _mockErp.Server.CreateHandler());
+
+                services.Configure<ErpOptions>(o => o.BaseUrl = "http://mock-erp.test/");
             });
         }
+    }
+
+    private sealed class ValidationProblemDetailsPayload
+    {
+        public Dictionary<string, string[]> Errors { get; set; } = new();
     }
 }

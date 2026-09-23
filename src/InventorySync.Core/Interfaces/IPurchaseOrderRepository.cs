@@ -1,12 +1,11 @@
 using InventorySync.Core.Dtos;
 using InventorySync.Core.Entities;
-using InventorySync.Core.Enums;
 
 namespace InventorySync.Core.Interfaces;
 
 public interface IPurchaseOrderRepository
 {
-    Task<PagedResult<PurchaseOrder>> GetPagedAsync(PurchaseOrderStatus? status, int page, int pageSize, CancellationToken ct = default);
+    Task<PagedResult<PurchaseOrder>> GetPagedAsync(PurchaseOrderQuery query, CancellationToken ct = default);
 
     Task<PurchaseOrder?> GetByIdAsync(int id, bool includeLines, CancellationToken ct = default);
 

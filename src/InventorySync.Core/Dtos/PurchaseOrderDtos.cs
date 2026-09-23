@@ -22,6 +22,8 @@ public class PurchaseOrderDto
 
     public DateTime? LastSyncedUtc { get; set; }
 
+    public DateTime? LocallyModifiedUtc { get; set; }
+
     public List<PurchaseOrderLineDto> Lines { get; set; } = new();
 }
 

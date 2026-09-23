@@ -20,6 +20,8 @@ public class InventoryItemDto
 
     public DateTime? LastSyncedUtc { get; set; }
 
+    public DateTime? LocallyModifiedUtc { get; set; }
+
     public string? ErpRecordId { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
