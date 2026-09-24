@@ -6,15 +6,24 @@ using InventorySync.Core.Interfaces;
 
 namespace InventorySync.Infrastructure.Services;
 
+/// <summary>
+/// Default implementation of the purchase order business operations.
+/// </summary>
 public class PurchaseOrderService : IPurchaseOrderService
 {
     private readonly IPurchaseOrderRepository _repository;
 
+    /// <summary>
+    /// Initializes a new instance of the PurchaseOrderService class.
+    /// </summary>
     public PurchaseOrderService(IPurchaseOrderRepository repository)
     {
         _repository = repository;
     }
 
+    /// <summary>
+    /// Gets a paged set of records.
+    /// </summary>
     public async Task<PagedResult<PurchaseOrderDto>> GetPagedAsync(PurchaseOrderQuery query, CancellationToken ct = default)
     {
         var result = await _repository.GetPagedAsync(query, ct);
@@ -28,6 +37,9 @@ public class PurchaseOrderService : IPurchaseOrderService
         };
     }
 
+    /// <summary>
+    /// Gets a record by id.
+    /// </summary>
     public async Task<PurchaseOrderDto> GetByIdAsync(int id, CancellationToken ct = default)
     {
         var order = await _repository.GetByIdAsync(id, true, ct)
@@ -36,6 +48,9 @@ public class PurchaseOrderService : IPurchaseOrderService
         return DtoMapper.ToDto(order);
     }
 
+    /// <summary>
+    /// create async.
+    /// </summary>
     public async Task<PurchaseOrderDto> CreateAsync(CreatePurchaseOrderRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.PoNumber))
@@ -93,6 +108,9 @@ public class PurchaseOrderService : IPurchaseOrderService
         return DtoMapper.ToDto(order);
     }
 
+    /// <summary>
+    /// submit async.
+    /// </summary>
     public async Task<PurchaseOrderDto> SubmitAsync(int id, CancellationToken ct = default)
     {
         var order = await _repository.GetByIdAsync(id, true, ct)
@@ -110,6 +128,9 @@ public class PurchaseOrderService : IPurchaseOrderService
         return DtoMapper.ToDto(order);
     }
 
+    /// <summary>
+    /// receive line async.
+    /// </summary>
     public async Task<PurchaseOrderDto> ReceiveLineAsync(int id, int lineId, ReceiveLineRequest request, CancellationToken ct = default)
     {
         var order = await _repository.GetByIdAsync(id, true, ct)
@@ -145,6 +166,9 @@ public class PurchaseOrderService : IPurchaseOrderService
         return DtoMapper.ToDto(order);
     }
 
+    /// <summary>
+    /// cancel async.
+    /// </summary>
     public async Task<PurchaseOrderDto> CancelAsync(int id, CancellationToken ct = default)
     {
         var order = await _repository.GetByIdAsync(id, true, ct)

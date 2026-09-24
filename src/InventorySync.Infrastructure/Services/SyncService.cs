@@ -14,6 +14,9 @@ using Microsoft.Extensions.Options;
 
 namespace InventorySync.Infrastructure.Services;
 
+/// <summary>
+/// Sync engine: pages ERP records, matches them by natural key, applies conflict resolution and writes the audit trail.
+/// </summary>
 public class SyncService : ISyncService
 {
     private const string ConflictMessage =
@@ -27,6 +30,9 @@ public class SyncService : ISyncService
     private readonly IErpClient _erpClient;
     private readonly IOptions<SyncOptions> _options;
 
+    /// <summary>
+    /// Initializes a new instance of the SyncService class.
+    /// </summary>
     public SyncService(
         IInventoryItemRepository inventoryRepository,
         IPurchaseOrderRepository purchaseOrderRepository,
@@ -43,6 +49,9 @@ public class SyncService : ISyncService
 
     private SyncOptions Options => _options.Value;
 
+    /// <summary>
+    /// Runs a full inventory synchronisation.
+    /// </summary>
     public async Task<SyncRunDto> SyncInventoryAsync(string triggeredBy, CancellationToken ct = default)
     {
         var run = await BeginRunAsync(SyncEntityType.InventoryItem, triggeredBy, null, ct);
@@ -62,6 +71,9 @@ public class SyncService : ISyncService
         return DtoMapper.ToDto(run);
     }
 
+    /// <summary>
+    /// Runs a full purchase order synchronisation.
+    /// </summary>
     public async Task<SyncRunDto> SyncPurchaseOrdersAsync(string triggeredBy, CancellationToken ct = default)
     {
         var run = await BeginRunAsync(SyncEntityType.PurchaseOrder, triggeredBy, null, ct);
@@ -81,6 +93,9 @@ public class SyncService : ISyncService
         return DtoMapper.ToDto(run);
     }
 
+    /// <summary>
+    /// Retries the records that failed in a run.
+    /// </summary>
     public async Task<SyncRunDto> RetryFailedRecordsAsync(int syncRunId, CancellationToken ct = default)
     {
         var parent = await _syncRepository.GetRunByIdAsync(syncRunId, ct)
@@ -126,6 +141,9 @@ public class SyncService : ISyncService
         return DtoMapper.ToDto(child);
     }
 
+    /// <summary>
+    /// Gets sync runs.
+    /// </summary>
     public async Task<PagedResult<SyncRunDto>> GetRunsAsync(
         SyncEntityType? entityType,
         SyncRunStatus? status,
@@ -144,6 +162,9 @@ public class SyncService : ISyncService
         };
     }
 
+    /// <summary>
+    /// Gets a sync run by id.
+    /// </summary>
     public async Task<SyncRunDto> GetRunByIdAsync(int id, CancellationToken ct = default)
     {
         var run = await _syncRepository.GetRunByIdAsync(id, ct)
@@ -152,6 +173,9 @@ public class SyncService : ISyncService
         return DtoMapper.ToDto(run);
     }
 
+    /// <summary>
+    /// Gets audit entries.
+    /// </summary>
     public async Task<PagedResult<SyncAuditEntryDto>> GetAuditEntriesAsync(
         int syncRunId,
         SyncAuditAction? action,

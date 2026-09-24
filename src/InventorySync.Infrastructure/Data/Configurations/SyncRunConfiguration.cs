@@ -5,8 +5,14 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace InventorySync.Infrastructure.Data.Configurations;
 
+/// <summary>
+/// EF Core fluent configuration for the SyncRun entity.
+/// </summary>
 public class SyncRunConfiguration : IEntityTypeConfiguration<SyncRun>
 {
+    /// <summary>
+    /// Configures the entity mapping.
+    /// </summary>
     public void Configure(EntityTypeBuilder<SyncRun> builder)
     {
         builder.ToTable("SyncRuns");

@@ -7,8 +7,14 @@ using InventorySync.Core.Mapping;
 
 namespace InventorySync.Infrastructure.Erp;
 
+/// <summary>
+/// Maps ERP wire records to domain entities with field-level validation instead of throwing.
+/// </summary>
 public static class ErpRecordMapper
 {
+    /// <summary>
+    /// The erp date format.
+    /// </summary>
     public const string ErpDateFormat = "yyyyMMddHHmmss";
 
     private static readonly IReadOnlyDictionary<string, PurchaseOrderStatus> StatusCodes =
@@ -21,6 +27,9 @@ public static class ErpRecordMapper
             ["CAN"] = PurchaseOrderStatus.Cancelled,
         };
 
+    /// <summary>
+    /// Maps an ERP inventory record to an InventoryItem.
+    /// </summary>
     public static ErpMappingResult<InventoryItem> MapInventoryItem(ErpInventoryItemRecord record)
     {
         var errors = new List<FieldError>();
@@ -67,6 +76,9 @@ public static class ErpRecordMapper
         return ErpMappingResult<InventoryItem>.Success(item);
     }
 
+    /// <summary>
+    /// Maps an ERP purchase order record to a PurchaseOrder.
+    /// </summary>
     public static ErpMappingResult<PurchaseOrder> MapPurchaseOrder(ErpPurchaseOrderRecord record)
     {
         var errors = new List<FieldError>();

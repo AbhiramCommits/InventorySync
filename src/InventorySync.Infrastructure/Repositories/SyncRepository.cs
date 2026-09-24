@@ -8,20 +8,32 @@ using Microsoft.EntityFrameworkCore;
 
 namespace InventorySync.Infrastructure.Repositories;
 
+/// <summary>
+/// EF Core implementation of the sync run repository.
+/// </summary>
 public class SyncRepository : ISyncRepository
 {
     private readonly SyncDbContext _context;
 
+    /// <summary>
+    /// Initializes a new instance of the SyncRepository class.
+    /// </summary>
     public SyncRepository(SyncDbContext context)
     {
         _context = context;
     }
 
+    /// <summary>
+    /// add run async.
+    /// </summary>
     public Task AddRunAsync(SyncRun run, CancellationToken ct = default)
     {
         return _context.SyncRuns.AddAsync(run, ct).AsTask();
     }
 
+    /// <summary>
+    /// Gets sync runs.
+    /// </summary>
     public async Task<PagedResult<SyncRun>> GetRunsAsync(
         SyncEntityType? entityType,
         SyncRunStatus? status,
@@ -57,11 +69,17 @@ public class SyncRepository : ISyncRepository
         };
     }
 
+    /// <summary>
+    /// Gets a sync run by id.
+    /// </summary>
     public Task<SyncRun?> GetRunByIdAsync(int id, CancellationToken ct = default)
     {
         return _context.SyncRuns.FirstOrDefaultAsync(x => x.Id == id, ct);
     }
 
+    /// <summary>
+    /// Gets audit entries.
+    /// </summary>
     public async Task<IReadOnlyList<SyncAuditEntry>> GetAuditEntriesAsync(
         int syncRunId,
         SyncAuditAction? action,
@@ -85,6 +103,9 @@ public class SyncRepository : ISyncRepository
             .ToListAsync(ct);
     }
 
+    /// <summary>
+    /// count audit entries async.
+    /// </summary>
     public Task<int> CountAuditEntriesAsync(int syncRunId, SyncAuditAction? action, CancellationToken ct = default)
     {
         var query = _context.SyncAuditEntries.AsNoTracking().Where(x => x.SyncRunId == syncRunId);
@@ -97,6 +118,9 @@ public class SyncRepository : ISyncRepository
         return query.CountAsync(ct);
     }
 
+    /// <summary>
+    /// Gets audit entries.
+    /// </summary>
     public async Task<IReadOnlyList<SyncAuditEntry>> GetAuditEntriesByActionAsync(
         int syncRunId,
         SyncAuditAction action,
@@ -109,11 +133,17 @@ public class SyncRepository : ISyncRepository
             .ToListAsync(ct);
     }
 
+    /// <summary>
+    /// Stages audit entries for saving.
+    /// </summary>
     public void AddAuditEntries(IEnumerable<SyncAuditEntry> entries)
     {
         _context.SyncAuditEntries.AddRange(entries);
     }
 
+    /// <summary>
+    /// save changes async.
+    /// </summary>
     public Task<int> SaveChangesAsync(CancellationToken ct = default)
     {
         return _context.SaveChangesAsync(ct);

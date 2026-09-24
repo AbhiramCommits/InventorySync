@@ -3,12 +3,21 @@ using InventorySync.Core.Enums;
 
 namespace InventorySync.Infrastructure.Erp;
 
+/// <summary>
+/// Deterministic pseudo-random generator used by the data seeder and the mock ERP.
+/// </summary>
 public static class ErpDataGenerator
 {
+    /// <summary>
+    /// The default seed.
+    /// </summary>
     public const int DefaultSeed = 20240101;
 
     private static readonly DateTime EpochUtc = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
+    /// <summary>
+    /// Generates deterministic inventory records.
+    /// </summary>
     public static IEnumerable<SeedInventoryRecord> GenerateInventory(int count, int seed)
     {
         var random = new Random(seed);
@@ -34,6 +43,9 @@ public static class ErpDataGenerator
         }
     }
 
+    /// <summary>
+    /// Generates deterministic purchase order records.
+    /// </summary>
     public static IEnumerable<SeedPurchaseOrderRecord> GeneratePurchaseOrders(int count, int seed, int itemCount)
     {
         var random = new Random(seed ^ 0x5F3759DF);

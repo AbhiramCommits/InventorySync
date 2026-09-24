@@ -2,6 +2,9 @@ using InventorySync.Core.Enums;
 
 namespace InventorySync.Core.Dtos;
 
+/// <summary>
+/// Deterministic seed data shape for inventory items.
+/// </summary>
 public sealed record SeedInventoryRecord(
     string ErpRecordId,
     string Sku,
@@ -12,6 +15,9 @@ public sealed record SeedInventoryRecord(
     string WarehouseCode,
     DateTime ModifiedUtc);
 
+/// <summary>
+/// Deterministic seed data shape for purchase orders.
+/// </summary>
 public sealed record SeedPurchaseOrderRecord(
     string ErpRecordId,
     string PoNumber,
@@ -23,6 +29,9 @@ public sealed record SeedPurchaseOrderRecord(
     DateTime ModifiedUtc,
     IReadOnlyList<SeedPurchaseOrderLineRecord> Lines);
 
+/// <summary>
+/// Deterministic seed data shape for purchase order lines.
+/// </summary>
 public sealed record SeedPurchaseOrderLineRecord(
     string Sku,
     int QuantityOrdered,

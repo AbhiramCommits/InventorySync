@@ -7,15 +7,24 @@ using Microsoft.EntityFrameworkCore;
 
 namespace InventorySync.Infrastructure.Services;
 
+/// <summary>
+/// Default implementation of the inventory business operations.
+/// </summary>
 public class InventoryService : IInventoryService
 {
     private readonly IInventoryItemRepository _repository;
 
+    /// <summary>
+    /// Initializes a new instance of the InventoryService class.
+    /// </summary>
     public InventoryService(IInventoryItemRepository repository)
     {
         _repository = repository;
     }
 
+    /// <summary>
+    /// Gets a paged set of records.
+    /// </summary>
     public async Task<PagedResult<InventoryItemDto>> GetPagedAsync(InventoryItemQuery query, CancellationToken ct = default)
     {
         var result = await _repository.GetPagedAsync(query, ct);
@@ -29,6 +38,9 @@ public class InventoryService : IInventoryService
         };
     }
 
+    /// <summary>
+    /// Gets a record by id.
+    /// </summary>
     public async Task<InventoryItemDto> GetByIdAsync(int id, CancellationToken ct = default)
     {
         var item = await _repository.GetByIdAsync(id, ct)
@@ -37,6 +49,9 @@ public class InventoryService : IInventoryService
         return DtoMapper.ToDto(item);
     }
 
+    /// <summary>
+    /// Gets an item by SKU.
+    /// </summary>
     public async Task<InventoryItemDto> GetBySkuAsync(string sku, CancellationToken ct = default)
     {
         var item = await _repository.GetBySkuAsync(sku, ct)
@@ -45,6 +60,9 @@ public class InventoryService : IInventoryService
         return DtoMapper.ToDto(item);
     }
 
+    /// <summary>
+    /// create async.
+    /// </summary>
     public async Task<InventoryItemDto> CreateAsync(CreateInventoryItemRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.Sku))
@@ -79,6 +97,9 @@ public class InventoryService : IInventoryService
         return DtoMapper.ToDto(item);
     }
 
+    /// <summary>
+    /// Marks a record as updated.
+    /// </summary>
     public async Task<InventoryItemDto> UpdateAsync(int id, UpdateInventoryItemRequest request, CancellationToken ct = default)
     {
         var item = await _repository.GetByIdAsync(id, ct)
@@ -118,6 +139,9 @@ public class InventoryService : IInventoryService
         return DtoMapper.ToDto(item);
     }
 
+    /// <summary>
+    /// Marks a record as deleted.
+    /// </summary>
     public async Task DeleteAsync(int id, CancellationToken ct = default)
     {
         var item = await _repository.GetByIdAsync(id, ct)

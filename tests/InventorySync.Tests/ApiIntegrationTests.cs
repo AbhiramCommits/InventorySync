@@ -248,6 +248,14 @@ public class ApiIntegrationTests
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:DefaultConnection"] = "Server=localhost;Database=InventorySync;User Id=sa;Password=unused;TrustServerCertificate=True",
+                });
+            });
+
             builder.ConfigureServices(services =>
             {
                 var dbContextDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(SyncDbContext));

@@ -5,8 +5,14 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace InventorySync.Infrastructure.Data.Configurations;
 
+/// <summary>
+/// EF Core fluent configuration for the SyncAuditEntry entity.
+/// </summary>
 public class SyncAuditEntryConfiguration : IEntityTypeConfiguration<SyncAuditEntry>
 {
+    /// <summary>
+    /// Configures the entity mapping.
+    /// </summary>
     public void Configure(EntityTypeBuilder<SyncAuditEntry> builder)
     {
         builder.ToTable("SyncAuditEntries");

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Threading.RateLimiting;
 
 using FluentValidation;
 using FluentValidation.AspNetCore;
@@ -14,18 +15,24 @@ using InventorySync.Infrastructure.Repositories;
 using InventorySync.Infrastructure.Services;
 
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 
 using Serilog;
+using Serilog.Formatting.Compact;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseSerilog((context, _, configuration) =>
-    configuration.ReadFrom.Configuration(context.Configuration));
+    configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .Enrich.FromLogContext()
+        .WriteTo.Console(new CompactJsonFormatter()));
 
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
 builder.Services.AddEndpointsApiExplorer();
@@ -43,6 +50,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Path.Combine(AppContext.BaseDirectory, $"{typeof(Program).Assembly.GetName().Name}.xml"),
         Path.Combine(AppContext.BaseDirectory, "InventorySync.Core.xml"),
+        Path.Combine(AppContext.BaseDirectory, "InventorySync.Infrastructure.xml"),
     })
     {
         if (File.Exists(xmlFile))
@@ -55,7 +63,9 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddDbContext<SyncDbContext>(options =>
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured."),
+            ?? throw new InvalidOperationException(
+                "Connection string 'DefaultConnection' is not configured. Set it via the "
+                + "ConnectionStrings__DefaultConnection environment variable or user-secrets."),
         sql => sql.MigrationsAssembly(typeof(SyncDbContext).Assembly.FullName)));
 
 builder.Services.Configure<ErpOptions>(builder.Configuration.GetSection(ErpOptions.SectionName));
@@ -106,6 +116,36 @@ builder.Services.AddHealthChecks()
     .AddDbContextCheck<SyncDbContext>("database", tags: new[] { "db" })
     .AddCheck<ErpHealthCheck>("erp", tags: new[] { "erp" });
 
+var rateLimitPermitLimit = builder.Configuration.GetValue("RateLimiting:PermitLimit", 10);
+var rateLimitWindowSeconds = builder.Configuration.GetValue("RateLimiting:WindowSeconds", 60);
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, _) =>
+    {
+        context.HttpContext.Response.ContentType = "application/problem+json";
+        var problem = new { title = "Too many sync requests.", status = 429, detail = "Rate limit exceeded. Retry after a short wait." };
+        await context.HttpContext.Response.WriteAsync(JsonSerializer.Serialize(problem), context.HttpContext.RequestAborted);
+    };
+
+    options.AddFixedWindowLimiter("sync", limiter =>
+    {
+        limiter.PermitLimit = rateLimitPermitLimit;
+        limiter.Window = TimeSpan.FromSeconds(rateLimitWindowSeconds);
+        limiter.QueueLimit = 0;
+    });
+});
+
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProvider>();
+    options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProvider>();
+});
+
+builder.Services.AddOutputCache();
+
 var app = builder.Build();
 
 if (args.Any(a => string.Equals(a, "seed", StringComparison.OrdinalIgnoreCase)))
@@ -123,8 +163,13 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+
+app.UseResponseCompression();
+app.UseOutputCache();
+app.UseRateLimiter();
 
 app.UseCors(CorsOptions.PolicyName);
 app.UseDefaultFiles();

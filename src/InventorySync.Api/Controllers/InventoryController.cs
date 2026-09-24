@@ -1,7 +1,10 @@
+using InventorySync.Api.Attributes;
+
 using InventorySync.Core.Dtos;
 using InventorySync.Core.Interfaces;
 
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.OutputCaching;
 
 namespace InventorySync.Api.Controllers;
 
@@ -31,6 +34,11 @@ public class InventoryController : ControllerBase
     /// <param name="pageSize">Page size (max 200).</param>
     /// <param name="ct">Cancellation token.</param>
     [HttpGet]
+    [GenerateETag]
+    [OutputCache(Duration = 30, VaryByQueryKeys = new[]
+    {
+        "search", "warehouseCode", "lastSyncedFrom", "lastSyncedTo", "sort", "page", "pageSize",
+    })]
     public async Task<ActionResult<PagedResult<InventoryItemDto>>> GetAll(
         [FromQuery] string? search,
         [FromQuery] string? warehouseCode,
