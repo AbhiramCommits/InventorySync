@@ -5,8 +5,14 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace InventorySync.Infrastructure.Data.Configurations;
 
+/// <summary>
+/// EF Core fluent configuration for the PurchaseOrderLine entity.
+/// </summary>
 public class PurchaseOrderLineConfiguration : IEntityTypeConfiguration<PurchaseOrderLine>
 {
+    /// <summary>
+    /// Configures the entity mapping.
+    /// </summary>
     public void Configure(EntityTypeBuilder<PurchaseOrderLine> builder)
     {
         builder.ToTable("PurchaseOrderLines");

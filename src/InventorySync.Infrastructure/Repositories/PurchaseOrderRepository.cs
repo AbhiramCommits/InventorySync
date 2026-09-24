@@ -7,6 +7,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace InventorySync.Infrastructure.Repositories;
 
+/// <summary>
+/// EF Core implementation of the purchase order repository.
+/// </summary>
 public class PurchaseOrderRepository : IPurchaseOrderRepository
 {
     private static readonly IReadOnlyDictionary<string, string> SortColumns =
@@ -22,11 +25,17 @@ public class PurchaseOrderRepository : IPurchaseOrderRepository
 
     private readonly SyncDbContext _context;
 
+    /// <summary>
+    /// Initializes a new instance of the PurchaseOrderRepository class.
+    /// </summary>
     public PurchaseOrderRepository(SyncDbContext context)
     {
         _context = context;
     }
 
+    /// <summary>
+    /// Gets a paged set of records.
+    /// </summary>
     public async Task<PagedResult<PurchaseOrder>> GetPagedAsync(PurchaseOrderQuery query, CancellationToken ct = default)
     {
         var filtered = _context.PurchaseOrders.AsNoTracking();
@@ -76,6 +85,9 @@ public class PurchaseOrderRepository : IPurchaseOrderRepository
         };
     }
 
+    /// <summary>
+    /// Gets a record by id.
+    /// </summary>
     public Task<PurchaseOrder?> GetByIdAsync(int id, bool includeLines, CancellationToken ct = default)
     {
         var query = _context.PurchaseOrders.AsQueryable();
@@ -88,6 +100,9 @@ public class PurchaseOrderRepository : IPurchaseOrderRepository
         return query.FirstOrDefaultAsync(x => x.Id == id, ct);
     }
 
+    /// <summary>
+    /// Gets orders by PO number.
+    /// </summary>
     public async Task<Dictionary<string, PurchaseOrder>> GetByPoNumbersAsync(
         IReadOnlyCollection<string> poNumbers,
         CancellationToken ct = default)
@@ -100,26 +115,41 @@ public class PurchaseOrderRepository : IPurchaseOrderRepository
         return orders.ToDictionary(x => x.PoNumber, StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// po number exists async.
+    /// </summary>
     public Task<bool> PoNumberExistsAsync(string poNumber, CancellationToken ct = default)
     {
         return _context.PurchaseOrders.AnyAsync(x => x.PoNumber == poNumber, ct);
     }
 
+    /// <summary>
+    /// add async.
+    /// </summary>
     public Task AddAsync(PurchaseOrder order, CancellationToken ct = default)
     {
         return _context.PurchaseOrders.AddAsync(order, ct).AsTask();
     }
 
+    /// <summary>
+    /// Marks a record as updated.
+    /// </summary>
     public void Update(PurchaseOrder order)
     {
         _context.PurchaseOrders.Update(order);
     }
 
+    /// <summary>
+    /// Removes purchase order lines.
+    /// </summary>
     public void RemoveLines(IEnumerable<PurchaseOrderLine> lines)
     {
         _context.PurchaseOrderLines.RemoveRange(lines);
     }
 
+    /// <summary>
+    /// save changes async.
+    /// </summary>
     public Task<int> SaveChangesAsync(CancellationToken ct = default)
     {
         return _context.SaveChangesAsync(ct);

@@ -4,11 +4,17 @@ using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
 
+using InventorySync.Core;
 using InventorySync.Core.Dtos.Erp;
 using InventorySync.Core.Interfaces;
 
+using Microsoft.AspNetCore.Http;
+
 namespace InventorySync.Infrastructure.Erp;
 
+/// <summary>
+/// HTTP implementation of the ERP client with correlation-id propagation.
+/// </summary>
 public class ErpHttpClient : IErpClient
 {
     private const int DefaultPageSize = 500;
@@ -17,12 +23,20 @@ public class ErpHttpClient : IErpClient
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly HttpClient _httpClient;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
 
-    public ErpHttpClient(HttpClient httpClient)
+    /// <summary>
+    /// erp http client.
+    /// </summary>
+    public ErpHttpClient(HttpClient httpClient, IHttpContextAccessor? httpContextAccessor = null)
     {
         _httpClient = httpClient;
+        _httpContextAccessor = httpContextAccessor;
     }
 
+    /// <summary>
+    /// Gets inventory records from the ERP.
+    /// </summary>
     public async Task<IReadOnlyList<ErpInventoryItemRecord>> GetInventoryAsync(DateTime? modifiedSince, CancellationToken ct = default)
     {
         var results = new List<ErpInventoryItemRecord>();
@@ -50,6 +64,9 @@ public class ErpHttpClient : IErpClient
         return results;
     }
 
+    /// <summary>
+    /// Gets inventory records from the ERP.
+    /// </summary>
     public async Task<IReadOnlyList<ErpInventoryItemRecord>> GetInventoryBySkusAsync(IReadOnlyCollection<string> skus, CancellationToken ct = default)
     {
         var results = new List<ErpInventoryItemRecord>();
@@ -64,6 +81,9 @@ public class ErpHttpClient : IErpClient
         return results;
     }
 
+    /// <summary>
+    /// Gets purchase order records from the ERP.
+    /// </summary>
     public async Task<IReadOnlyList<ErpPurchaseOrderRecord>> GetPurchaseOrdersAsync(DateTime? modifiedSince, CancellationToken ct = default)
     {
         var results = new List<ErpPurchaseOrderRecord>();
@@ -91,6 +111,9 @@ public class ErpHttpClient : IErpClient
         return results;
     }
 
+    /// <summary>
+    /// Gets purchase order records from the ERP.
+    /// </summary>
     public async Task<IReadOnlyList<ErpPurchaseOrderRecord>> GetPurchaseOrdersByNumbersAsync(IReadOnlyCollection<string> poNumbers, CancellationToken ct = default)
     {
         var results = new List<ErpPurchaseOrderRecord>();
@@ -105,6 +128,9 @@ public class ErpHttpClient : IErpClient
         return results;
     }
 
+    /// <summary>
+    /// Gets an item detail from the ERP SOAP endpoint.
+    /// </summary>
     public async Task<ErpItemDetailRecord?> GetItemDetailAsync(string sku, CancellationToken ct = default)
     {
         var body =
@@ -119,6 +145,7 @@ public class ErpHttpClient : IErpClient
         {
             Content = new StringContent(body, Encoding.UTF8, "text/xml"),
         };
+        AddCorrelationHeader(request);
 
         using var response = await _httpClient.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();
@@ -155,9 +182,23 @@ public class ErpHttpClient : IErpClient
         return parent.Elements().FirstOrDefault(e => e.Name.LocalName == localName)?.Value.Trim();
     }
 
+    private void AddCorrelationHeader(HttpRequestMessage request)
+    {
+        var correlationId = _httpContextAccessor?.HttpContext?.Items[CorrelationHeaders.ItemKey] as string;
+
+        if (!string.IsNullOrWhiteSpace(correlationId)
+            && !request.Headers.Contains(CorrelationHeaders.HeaderName))
+        {
+            request.Headers.TryAddWithoutValidation(CorrelationHeaders.HeaderName, correlationId);
+        }
+    }
+
     private async Task<ErpPage<T>> GetPageAsync<T>(string url, CancellationToken ct)
     {
-        using var response = await _httpClient.GetAsync(url, ct);
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        AddCorrelationHeader(request);
+
+        using var response = await _httpClient.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();
 
         var page = await response.Content.ReadFromJsonAsync<ErpPage<T>>(JsonOptions, ct);

@@ -5,6 +5,9 @@ namespace InventorySync.Infrastructure.Services;
 
 internal static class DtoMapper
 {
+    /// <summary>
+    /// Converts the entity to its DTO representation.
+    /// </summary>
     public static InventoryItemDto ToDto(InventoryItem item)
     {
         return new InventoryItemDto
@@ -23,6 +26,9 @@ internal static class DtoMapper
         };
     }
 
+    /// <summary>
+    /// Converts the entity to its DTO representation.
+    /// </summary>
     public static PurchaseOrderDto ToDto(PurchaseOrder order)
     {
         return new PurchaseOrderDto
@@ -41,6 +47,9 @@ internal static class DtoMapper
         };
     }
 
+    /// <summary>
+    /// Converts the entity to its DTO representation.
+    /// </summary>
     public static PurchaseOrderLineDto ToDto(PurchaseOrderLine line)
     {
         return new PurchaseOrderLineDto
@@ -53,6 +62,9 @@ internal static class DtoMapper
         };
     }
 
+    /// <summary>
+    /// Converts the entity to its DTO representation.
+    /// </summary>
     public static SyncRunDto ToDto(SyncRun run)
     {
         return new SyncRunDto
@@ -71,6 +83,9 @@ internal static class DtoMapper
         };
     }
 
+    /// <summary>
+    /// Converts the entity to its DTO representation.
+    /// </summary>
     public static SyncAuditEntryDto ToDto(SyncAuditEntry entry)
     {
         return new SyncAuditEntryDto

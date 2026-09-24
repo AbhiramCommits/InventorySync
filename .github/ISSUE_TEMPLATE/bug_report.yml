@@ -1,0 +1,53 @@
+name: Bug report
+description: Report a defect in InventorySync
+title: "fix: <short description>"
+labels: [bug]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the observed behaviour.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: Steps, endpoints, or queries that trigger the bug.
+      placeholder: |
+        1. docker compose up -d
+        2. POST /api/sync/inventory
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - API
+        - Sync engine
+        - ERP client / MockErp
+        - Database / migrations
+        - Admin UI
+        - CI / tooling
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and context
+      description: Correlation id, log lines (JSON console output), or query results.
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: e.g. v1.0.0 or commit sha

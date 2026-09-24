@@ -4,6 +4,7 @@ using InventorySync.Core.Dtos.Erp;
 using InventorySync.Infrastructure.Erp;
 
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Http;
@@ -120,7 +121,35 @@ public class ErpHttpClientTests
         Assert.Equal(6, handler.CallCount);
     }
 
-    private static ErpHttpClient CreateClient(HttpMessageHandler handler)
+    [Fact]
+    public async Task CorrelationHeader_IsPropagatedToErpCalls()
+    {
+        string? capturedHeader = null;
+        var handler = new StubHandler();
+        handler.Enqueue(() =>
+        {
+            capturedHeader = handler.LastRequest?.Headers
+                .FirstOrDefault(h => h.Key == Core.CorrelationHeaders.HeaderName)
+                .Value?.FirstOrDefault();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"items":[],"page":1,"pageSize":500,"totalCount":0}""", System.Text.Encoding.UTF8, "application/json"),
+            };
+        });
+
+        var accessor = new HttpContextAccessor
+        {
+            HttpContext = new DefaultHttpContext(),
+        };
+        accessor.HttpContext.Items[Core.CorrelationHeaders.ItemKey] = "corr-12345";
+
+        var client = CreateClient(handler, accessor);
+        await client.GetInventoryAsync(null);
+
+        Assert.Equal("corr-12345", capturedHeader);
+    }
+
+    private static ErpHttpClient CreateClient(HttpMessageHandler handler, IHttpContextAccessor? accessor = null)
     {
         var policyHandler = new PolicyHttpMessageHandler(ErpPolicies.CircuitBreakerPolicy())
         {
@@ -135,7 +164,7 @@ public class ErpHttpClientTests
             BaseAddress = new Uri("http://erp.test/"),
         };
 
-        return new ErpHttpClient(http);
+        return new ErpHttpClient(http, accessor);
     }
 
     private static ErpHttpClient CreateClient(WebApplicationFactory<MockErp.Program> factory)
@@ -167,6 +196,8 @@ public class ErpHttpClientTests
 
         public int CallCount { get; private set; }
 
+        public HttpRequestMessage? LastRequest { get; private set; }
+
         public void Enqueue(Func<HttpResponseMessage> response)
         {
             _responses.Enqueue(response);
@@ -175,6 +206,7 @@ public class ErpHttpClientTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             CallCount++;
+            LastRequest = request;
             var response = _responses.Count > 1 ? _responses.Dequeue() : _responses.Peek();
             return Task.FromResult(response());
         }

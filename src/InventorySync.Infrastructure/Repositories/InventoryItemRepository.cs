@@ -7,6 +7,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace InventorySync.Infrastructure.Repositories;
 
+/// <summary>
+/// EF Core implementation of the inventory item repository.
+/// </summary>
 public class InventoryItemRepository : IInventoryItemRepository
 {
     private static readonly IReadOnlyDictionary<string, string> SortColumns =
@@ -22,11 +25,17 @@ public class InventoryItemRepository : IInventoryItemRepository
 
     private readonly SyncDbContext _context;
 
+    /// <summary>
+    /// Initializes a new instance of the InventoryItemRepository class.
+    /// </summary>
     public InventoryItemRepository(SyncDbContext context)
     {
         _context = context;
     }
 
+    /// <summary>
+    /// Gets a paged set of records.
+    /// </summary>
     public async Task<PagedResult<InventoryItem>> GetPagedAsync(InventoryItemQuery query, CancellationToken ct = default)
     {
         var filtered = _context.InventoryItems.AsNoTracking();
@@ -66,16 +75,25 @@ public class InventoryItemRepository : IInventoryItemRepository
         };
     }
 
+    /// <summary>
+    /// Gets a record by id.
+    /// </summary>
     public Task<InventoryItem?> GetByIdAsync(int id, CancellationToken ct = default)
     {
         return _context.InventoryItems.FirstOrDefaultAsync(x => x.Id == id, ct);
     }
 
+    /// <summary>
+    /// Gets an item by SKU.
+    /// </summary>
     public Task<InventoryItem?> GetBySkuAsync(string sku, CancellationToken ct = default)
     {
         return _context.InventoryItems.FirstOrDefaultAsync(x => x.Sku == sku, ct);
     }
 
+    /// <summary>
+    /// Gets items by their SKUs.
+    /// </summary>
     public async Task<Dictionary<string, InventoryItem>> GetBySkusAsync(
         IReadOnlyCollection<string> skus,
         CancellationToken ct = default)
@@ -87,31 +105,49 @@ public class InventoryItemRepository : IInventoryItemRepository
         return items.ToDictionary(x => x.Sku, StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// sku exists async.
+    /// </summary>
     public Task<bool> SkuExistsAsync(string sku, CancellationToken ct = default)
     {
         return _context.InventoryItems.AnyAsync(x => x.Sku == sku, ct);
     }
 
+    /// <summary>
+    /// add async.
+    /// </summary>
     public Task AddAsync(InventoryItem item, CancellationToken ct = default)
     {
         return _context.InventoryItems.AddAsync(item, ct).AsTask();
     }
 
+    /// <summary>
+    /// Marks a record as updated.
+    /// </summary>
     public void Update(InventoryItem item)
     {
         _context.InventoryItems.Update(item);
     }
 
+    /// <summary>
+    /// Sets the original rowversion used for optimistic concurrency.
+    /// </summary>
     public void SetOriginalRowVersion(InventoryItem item, byte[] rowVersion)
     {
         _context.Entry(item).Property(x => x.RowVersion).OriginalValue = rowVersion;
     }
 
+    /// <summary>
+    /// Marks a record as deleted.
+    /// </summary>
     public void Delete(InventoryItem item)
     {
         _context.InventoryItems.Remove(item);
     }
 
+    /// <summary>
+    /// save changes async.
+    /// </summary>
     public Task<int> SaveChangesAsync(CancellationToken ct = default)
     {
         return _context.SaveChangesAsync(ct);

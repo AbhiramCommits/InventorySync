@@ -5,8 +5,14 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace InventorySync.Infrastructure.Data.Configurations;
 
+/// <summary>
+/// EF Core fluent configuration for the InventoryItem entity.
+/// </summary>
 public class InventoryItemConfiguration : IEntityTypeConfiguration<InventoryItem>
 {
+    /// <summary>
+    /// Configures the entity mapping.
+    /// </summary>
     public void Configure(EntityTypeBuilder<InventoryItem> builder)
     {
         builder.ToTable("InventoryItems");

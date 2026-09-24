@@ -1,8 +1,12 @@
+using InventorySync.Api.Attributes;
+
 using InventorySync.Core.Dtos;
 using InventorySync.Core.Enums;
 using InventorySync.Core.Interfaces;
 
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.OutputCaching;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace InventorySync.Api.Controllers;
 
@@ -24,6 +28,7 @@ public class SyncController : ControllerBase
     /// Triggers a full inventory synchronisation from the ERP system and returns the resulting sync run.
     /// </summary>
     [HttpPost("inventory")]
+    [EnableRateLimiting("sync")]
     public async Task<ActionResult<SyncRunDto>> SyncInventory([FromQuery] string? triggeredBy, CancellationToken ct = default)
     {
         return Ok(await _service.SyncInventoryAsync(triggeredBy ?? "api", ct));
@@ -33,6 +38,7 @@ public class SyncController : ControllerBase
     /// Triggers a full purchase order synchronisation from the ERP system and returns the resulting sync run.
     /// </summary>
     [HttpPost("purchase-orders")]
+    [EnableRateLimiting("sync")]
     public async Task<ActionResult<SyncRunDto>> SyncPurchaseOrders([FromQuery] string? triggeredBy, CancellationToken ct = default)
     {
         return Ok(await _service.SyncPurchaseOrdersAsync(triggeredBy ?? "api", ct));
@@ -42,6 +48,7 @@ public class SyncController : ControllerBase
     /// Retries the records that failed in the given run and creates a new child sync run.
     /// </summary>
     [HttpPost("runs/{id:int}/retry")]
+    [EnableRateLimiting("sync")]
     public async Task<ActionResult<SyncRunDto>> RetryFailedRecords(int id, CancellationToken ct = default)
     {
         return Ok(await _service.RetryFailedRecordsAsync(id, ct));
@@ -51,6 +58,7 @@ public class SyncController : ControllerBase
     /// Returns a paged list of sync runs, optionally filtered by entity type and status.
     /// </summary>
     [HttpGet("runs")]
+    [OutputCache(Duration = 30, VaryByQueryKeys = new[] { "entityType", "status", "page", "pageSize" })]
     public async Task<ActionResult<PagedResult<SyncRunDto>>> GetRuns(
         [FromQuery] SyncEntityType? entityType,
         [FromQuery] SyncRunStatus? status,
